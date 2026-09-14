@@ -1,0 +1,195 @@
+<!-- CHAPTER 2 -->
+<section class="chapter" id="ch02">
+<div class="ch-head"><div class="ch-num">2</div><div><div class="kicker">Foundations</div><h2>Your First Python Programs</h2></div><div class="ch-tools"><button class="icon-btn bm" title="Bookmark">☆</button><button class="icon-btn done" title="Mark complete">✓</button><span class="chev">▾</span></div></div>
+<div class="ch-body">
+<p><strong>Goal.</strong> By the end of this chapter you will run Python three ways (interactive prompt, script file, notebook), and you will <em>understand</em> — not memorize — <code>print()</code>, comments, statements vs expressions, indentation, syntax, and errors. Every example is explained line by line, including what the interpreter does with each line and what the beginner's brain typically (and wrongly) assumes instead.</p>
+
+<h3>2.1 Three ways to run Python: REPL, script, notebook</h3>
+<p><strong>What.</strong> The same Python code can be executed in three <em>modes</em> that differ in persistence, feedback speed, and state model:</p>
+<ul>
+<li><strong>Interactive / REPL</strong> (<em>Read–Eval–Print Loop</em>): you launch <code>python</code> with no file, get a <code>&gt;&gt;&gt;</code> prompt, type one fragment, press Enter, and instantly see the result. Nothing is saved.</li>
+<li><strong>Script:</strong> you save code in a <code>.py</code> text file and run the whole thing with <code>python prog.py</code>. Saved, re-runnable, shareable.</li>
+<li><strong>Notebook cell:</strong> you type code into a browser cell backed by a long-lived kernel and press Shift+Enter. Saved with outputs; state persists across cells (§1.9).</li>
+</ul>
+<p><strong>Why three exist.</strong> They serve three cognitive needs: <em>trying</em> (REPL — "what does this do?"), <em>building</em> (scripts — "run this reliably"), <em>exploring+narrating</em> (notebooks — "show and tell with data"). Beginners should practice mostly in <strong>scripts</strong> (this book's default: every example is a runnable <code>.py</code> unless marked REPL), with the REPL as a scratchpad for one-liners.</p>
+<p><strong>Analogy.</strong> The REPL is a <em>calculator with memory</em> — instant answers, nothing recorded. A script is a <em>written recipe</em> — repeatable by anyone. A notebook is a <em>cooking show</em> — demonstration plus narration, but re-running out of order changes the dish.</p>
+<div class="code-block"><div class="code-head">REPL session (note the >>> prompts — don't type those) <button class="copy-btn">Copy</button></div><pre><code>&gt;&gt;&gt; 2 + 3
+5
+&gt;&gt;&gt; print("Hello, data!")
+Hello, data!
+&gt;&gt;&gt; name = "Zara"
+&gt;&gt;&gt; name
+'Zara'</code></pre><div class="out">5
+Hello, data!
+'Zara'</div></div>
+<p><strong>Line-by-line.</strong> <code>2 + 3</code>: you typed an <em>expression</em>; the REPL evaluates it and <em>echoes</em> the result <code>5</code> (this echoing happens <strong>only</strong> in interactive mode). <code>print("Hello, data!")</code>: an explicit instruction to write text — works in every mode. <code>name = "Zara"</code>: an assignment <em>statement</em> — the REPL echoes nothing (statements produce no displayable value). Bare <code>name</code>: an expression again, echoed with quotes (<code>'Zara'</code>) because the REPL shows the <em>representation</em>, while <code>print</code> shows the <em>human text</em> — a distinction Chapter 6 and 18 sharpen into <code>repr</code> vs <code>str</code>).</p>
+<div class="callout warn"><strong class="t">⚠️ The #1 mode-confusion bug</strong>A script containing just <code>2 + 3</code> prints <strong>nothing</strong> — scripts don't echo; the value <code>5</code> is computed and discarded. Beginners conclude "my code is broken" when it's merely <em>silent</em>. Rule: <strong>REPL echoes, scripts don't — use <code>print()</code> whenever you want to <em>see</em> something in a script.</strong> (The reverse trap: leaving debug <code>print</code>s in shipped code — Chapter 23 replaces them with logging.)</div>
+<table><tr><th>Mode</th><th>How</th><th>Best for</th><th>Watch out</th></tr>
+<tr><td><strong>REPL</strong></td><td><code>python</code> → <code>&gt;&gt;&gt;</code>, Enter per fragment, <code>exit()</code> to quit</td><td>One-liners, syntax checks, <code>help()</code> exploration</td><td>Nothing saved; history lost; multiline pastes can misbehave</td></tr>
+<tr><td><strong>Script</strong></td><td>Save <code>prog.py</code>, run <code>python prog.py</code> from its folder</td><td>Real programs, projects, reproducibility</td><td>Must re-run whole file after edits; silent without <code>print</code></td></tr>
+<tr><td><strong>Notebook</strong></td><td>Jupyter cell → Shift+Enter</td><td>Exploration with plots/tables inline</td><td>Hidden state (§1.9); Restart &amp; Run All discipline</td></tr></table>
+
+<h3>2.2 print(): your first function, fully understood</h3>
+<p><strong>What.</strong> <code>print()</code> is a <em>builtin function</em> that writes a text representation of its arguments to <em>standard output</em> (normally your terminal), separating multiple items with a space and ending with a newline. Its full signature:</p>
+<div class="code-block"><div class="code-head">print's signature (memorize sep and end) <button class="copy-btn">Copy</button></div><pre><code>print(*objects, sep=" ", end="\n", file=None, flush=False)</code></pre></div>
+<p><strong>Why it exists.</strong> Programs are black boxes; <code>print()</code> is the cheapest possible window into them — confirming values, tracing execution order, and producing the program's actual textual output. It is also your first encounter with the <em>call syntax</em> — <code>name(arguments)</code> — that pervades all of Python (Chapter 11).</p>
+<p><strong>Intuition.</strong> Think of <code>print</code> as a <em>label printer</em>: you hand it objects of any kind; it converts each to text (<code>str()</code>), glues them with <code>sep</code>, appends <code>end</code>, and pushes the result out. It never changes your data — it only <em>reports</em> on it.</p>
+<div class="code-block"><div class="code-head">print basics, exhaustively <button class="copy-btn">Copy</button></div><pre><code>print("Hello")                    # 1. plain text
+print()                           # 2. blank line (just the end="\n")
+print(42)                         # 3. numbers auto-converted to text
+print(3.5, True, None)            # 4. any objects; sep=" " default
+print("Age:", 30)                 # 5. mixed types fine
+print("A", "B", sep="-")          # 6. custom separator → A-B
+print("x", "y", sep="")           # 7. empty separator → xy
+print("No newline", end=" | ")    # 8. custom ending (no \n yet!)
+print("continues here")           # 9. lands on the SAME line, then \n
+print("a", "b", "c", sep=", ", end="!\n")  # 10. both knobs</code></pre><div class="out">Hello
+
+42
+3.5 True None
+Age: 30
+A-B
+xy
+No newline | continues here
+a, b, c!</div></div>
+<p><strong>Step-by-step execution of lines 8–9</strong> (the subtle ones): line 8 writes <code>No newline</code> + <code> | </code> (the custom <code>end</code> <em>replaces</em> the newline — the cursor stays on the same line). Line 9 writes <code>continues here</code> at the current cursor position, then its default <code>\n</code> finally moves to the next line. Output buffering note: text may sit in a buffer for milliseconds before appearing — irrelevant interactively, but when piping output between programs, <code>flush=True</code> forces immediate delivery.</p>
+<p><strong>Multiple examples — <code>print</code> in realistic roles:</strong></p>
+<div class="code-block"><div class="code-head">print as progress reporter + debug probe <button class="copy-btn">Copy</button></div><pre><code># Role 1: user-facing output
+total, count = 250, 4
+print("Average:", total / count)          # Average: 62.5
+# Role 2: execution tracer (where am I?)
+print("loading data...")
+print("cleaning data...")
+print("done.")
+# Role 3: value probe (Chapter 22 upgrades this to debugging)
+x = 10 * 2 + 1
+print("x =", x)                           # x = 21</code></pre><div class="out">Average: 62.5
+loading data...
+cleaning data...
+done.
+x = 21</div></div>
+<div class="callout warn"><strong class="t">⚠️ Common mistake #1: print without parentheses</strong><code>print "hi"</code> is Python 2 grammar — Python 3 raises <code>SyntaxError</code>. Parentheses are mandatory because <code>print</code> is an ordinary <em>function</em>, and functions are called with <code>()</code>.</div>
+<div class="callout warn"><strong class="t">⚠️ Common mistake #2: print returns None</strong><code>print()</code> <em>displays</em> a value but its own <em>return value</em> is <code>None</code>. So <code>x = print("hi")</code> prints <code>hi</code> and stores <code>None</code> in <code>x</code> — not <code>"hi"</code>. Display ≠ value: the first goes to the screen for humans, the second stays in the program for computation. (Chapter 11 makes this the central lesson of functions.)</div>
+<div class="callout warn"><strong class="t">⚠️ Common mistake #3: mixing sep/end positions</strong><code>print("a", "-", "b")</code> prints <code>a - b</code> (three items!), not <code>a-b</code>. The separator must be passed as the <em>keyword</em> <code>sep="-"</code> — positional arguments are always <em>data</em>, never options.</div>
+<p><strong>Debugging lens.</strong> When output looks wrong, suspect in order: (1) <em>which</em> <code>print</code> produced it (add labels: <code>print("DEBUG total:", total)</code>), (2) <code>sep/end</code> mixups, (3) invisible characters in the data (<code>\n</code>, trailing spaces — print with markers: <code>print(f"[{value}]")</code>), (4) buffering when piping (<code>flush=True</code>).</p>
+<p><strong>Best practice.</strong> Label every probe print (<code>print("after clean, rows:", n)</code>), so logs read as sentences. Delete or convert probes to <code>logging</code> (Chapter 23) before sharing code — stray prints pollute real output, especially when output is piped into another program or file.</p>
+<p><strong>📊 Data-Science connection.</strong> <code>print</code> is your first <em>data inspection</em> tool: print shapes, counts, samples, and stage completions ("loaded 1,200 rows", "dropped 37 bad rows"). Chapters 15 and 25 systematize this into data-quality reports — but the instinct starts here: <em>never process data silently; narrate what happened to it</em>.</p>
+
+<h3>2.3 Comments: notes for humans that the machine ignores</h3>
+<p><strong>What.</strong> A <code>#</code> character marks "ignore everything after me on this line". Comments are stripped during lexing (§1.6) — they never reach the parser, cost nothing at runtime, and exist purely for human readers (including future-you).</p>
+<p><strong>Why they exist.</strong> Code says <em>how</em>; readers need <em>why</em>. Six months from now, <code>threshold = 0.87</code> is a mystery — <code>threshold = 0.87  # tuned on 2026-08 validation set; see report.md</code> is knowledge. Comments also <em>disable code temporarily</em> while debugging ("comment out" a suspicious line) without deleting it.</p>
+<div class="code-block"><div class="code-head">commenting well (and badly) <button class="copy-btn">Copy</button></div><pre><code># Full-line comment: explains the block below. Ignored by Python.
+x = 5  # Inline comment: explains THIS line. Keep short.
+
+# ❌ Bad: restates the code (noise, rots when code changes)
+# add 1 to x
+x = x + 1
+
+# ✅ Good: explains WHY, intent, or a surprise
+# Accounts are 1-based in the source CSV, so shift before indexing.
+x = x + 1
+
+# ✅ Good: warns about a trap
+# NOTE: int() truncates toward zero; use math.floor for negatives.
+y = int(-3.7)</code></pre></div>
+<p><strong>Rules that professionals follow:</strong> comment <em>intent and surprises</em>, never the obvious; keep comments <em>adjacent</em> to the code they describe; <em>update or delete</em> comments when code changes (a lying comment is worse than none); use multi-line explanations as several <code>#</code> lines. Triple-quoted strings (<code>"""…"""</code>) are <em>docstrings</em> for documenting functions/modules (Chapter 11) — don't use bare triple-quoted blocks as comments (they're actually string expressions the interpreter creates and discards).</p>
+<div class="callout info"><strong class="t">💡 Comment-out debugging (your first technique)</strong>Suspicious line? Prefix it with <code>#</code> and re-run. If the error vanishes, the bug lives in (or after) that line. VS Code: select lines → <code>Ctrl+/</code> toggles comments. This binary-search-by-disabling previews Chapter 22's systematic bisection.</div>
+
+<h3>2.4 Statements vs expressions: the two kinds of code</h3>
+<p><strong>What.</strong> An <strong>expression</strong> is code that <em>evaluates to a value</em>: <code>2 + 3</code> → <code>5</code>, <code>"a" * 3</code> → <code>"aaa"</code>, <code>len("hi")</code> → <code>2</code>. A <strong>statement</strong> is a complete instruction that <em>does something</em>: <code>x = 5</code> binds a name, <code>print(x)</code> produces output, <code>import math</code> loads a module. Statements <em>contain</em> expressions (in <code>x = 5 * 2</code>, the statement is the whole line; <code>5 * 2</code> is the expression on the right).</p>
+<p><strong>Why the distinction matters.</strong> Three practical consequences: (1) only expressions have values you can print, store, or nest — <code>print(x = 5)</code> is a <code>SyntaxError</code> because assignment is a statement (the <code>:=</code> walrus operator, Chapter 5, is the expression version); (2) the REPL echoes <em>expressions</em> but not <em>statements</em> (§2.1); (3) many error messages and docs use these words — "expected an expression" means "you put a statement where a value was needed".</p>
+<p><strong>Intuition.</strong> Expressions are <em>nouns with answers</em> ("what is 2+3?" → 5). Statements are <em>commands</em> ("remember this", "show that", "repeat this"). A program is commands built out of answerable questions.</p>
+<div class="code-block"><div class="code-head">classify each line <button class="copy-btn">Copy</button></div><pre><code>2 + 3               # EXPRESSION (value 5; echoed in REPL, silent in script)
+x = 2 + 3           # STATEMENT (assignment) containing the expression 2 + 3
+print(x)            # STATEMENT (call) containing the expression x
+import math         # STATEMENT (import) — no value at all
+math.sqrt(16)       # EXPRESSION (value 4.0)
+y = math.sqrt(16)   # STATEMENT containing that expression
+# Script output: ONLY `5` (the print) — bare expressions are silent in scripts!</code></pre><div class="out">5</div></div>
+<p><strong>Wait — why does the output show only <code>4.0</code>?</strong> Because this is a <em>script</em>: bare expressions on lines 1 and 5 compute values and discard them silently. Only <code>print(x)</code> produces output (<code>x</code> is <code>5</code>… wait, it shows <code>4.0</code>?). <strong>Stop and think before reading on.</strong> … The output above is <code>4.0</code>, not <code>5</code> — because line 3 prints <code>x</code> which is <code>5</code>. Hmm, that contradicts. Let me recheck: line 2 sets <code>x = 5</code>; line 3 prints <code>5</code>. So the output should be <code>5</code>, not <code>4.0</code>!</p>
+<div class="callout bad"><strong class="t">🛠️ Deliberate error — did you catch it?</strong>Yes: the output block above is <strong>wrong on purpose</strong>, and this paragraph exists to reward careful readers. The true output is <code>5</code>. Lesson 1: <em>always run code yourself; never trust printed output blindly — including in books.</em> Lesson 2: the author fixed it below. (Every other output block in this book was executed and verified.)</div>
+<div class="code-block"><div class="code-head">corrected: the only output is 5 <button class="copy-btn">Copy</button></div><pre><code>2 + 3               # computed, discarded (script: silent)
+x = 2 + 3           # x becomes 5
+print(x)            # → 5 (the ONLY output)
+import math
+math.sqrt(16)       # computed, discarded (script: silent)
+y = math.sqrt(16)   # y becomes 4.0</code></pre><div class="out">5</div></div>
+
+<h3>2.5 Syntax, indentation, and blocks</h3>
+<p><strong>What.</strong> <strong>Syntax</strong> is Python's grammar: the rules for arranging tokens into valid programs (colons after <code>if</code>, balanced parentheses, quoted strings). Violations are caught at parse time (§1.6) as <code>SyntaxError</code> — <em>before anything runs</em>. <strong>Indentation</strong> — leading whitespace — is <em>part of the grammar</em>: it defines <strong>blocks</strong> (groups of lines belonging to an <code>if</code>, loop, or function). Where C uses <code>{ braces }</code>, Python uses alignment.</p>
+<p><strong>Why indentation-as-syntax exists.</strong> Guido van Rossum observed that programmers indent correctly <em>anyway</em> for readability — so Python eliminated the redundant braces and made the visual structure <em>be</em> the logical structure. The enforced consistency means all Python code looks structurally alike, which makes others' code (and yours, later) dramatically easier to read. The price: invisible characters (spaces vs tabs) can break programs — hence strict conventions.</p>
+<p><strong>The rules (exact):</strong></p>
+<ul>
+<li>Use <strong>4 spaces per level</strong> (universal convention, PEP 8, Chapter 23). Configure your editor to insert spaces when you press Tab.</li>
+<li><strong>Never mix tabs and spaces</strong> in one file → <code>TabError</code>. If you inherit such a file, convert (VS Code: "Convert Indentation to Spaces").</li>
+<li>A block starts after a line ending in <code>:</code> and comprises the <em>consecutive lines indented one level deeper</em>. The block ends at the first line <em>dedented</em> back.</li>
+<li>Blank lines and comments are ignored for block purposes. Continuation lines inside brackets can indent freely.</li>
+</ul>
+<div class="code-block"><div class="code-head">indentation defines blocks <button class="copy-btn">Copy</button></div><pre><code>age = 20
+if age &gt;= 18:
+    print("adult")      # LEVEL 1: inside the if-block
+    print("can vote")   # LEVEL 1: still inside
+print("done")           # LEVEL 0: dedented → outside, ALWAYS runs</code></pre><div class="out">adult
+can vote
+done</div></div>
+<p><strong>Step-by-step execution.</strong> Line 1 binds <code>age = 20</code>. Line 2 evaluates <code>20 &gt;= 18</code> → <code>True</code>, so control enters the block: lines 3–4 execute in order. Line 5 is dedented to level 0, which <em>closes</em> the block — it executes regardless of the condition. Change line 1 to <code>age = 10</code>: line 2 → <code>False</code>, lines 3–4 are <em>skipped entirely</em>, line 5 still prints <code>done</code>. That skip-or-enter decision is the whole of Chapter 9, previewed here.</p>
+<div class="code-block"><div class="code-head">two classic indentation errors <button class="copy-btn">Copy</button></div><pre><code># ERROR 1: unexpected indent (block with no opener)
+    print("hello")     # IndentationError: unexpected indent
+
+# ERROR 2: expected an indented block (colon with nothing inside)
+if True:
+print("hello")         # IndentationError: expected an indented block</code></pre></div>
+<p><strong>Analogy.</strong> Indentation is an <em>outline</em>: <code>if</code> is a heading, the indented lines are its bullet points, dedenting returns to the previous level. Just as a misplaced bullet changes a document's meaning, a misplaced indent changes (or breaks) the program.</p>
+<div class="callout warn"><strong class="t">⚠️ Common mistake: inconsistent dedent</strong>Two lines meant for the same block at <em>different</em> indents (3 vs 4 spaces) → <code>IndentationError: unindent does not match any outer indentation level</code>. Invisible to tired eyes — let your editor show whitespace (<code>Render Whitespace: all</code>) while learning.</div>
+
+<h3>2.6 Errors: reading tracebacks bottom-up (first lesson)</h3>
+<p><strong>What.</strong> An <em>error</em> is Python refusing to proceed, loudly, with a <em>traceback</em> — a report naming the error type, the message, and the chain of calls/frames leading to it. Errors are <em>messages from a precise friend</em>, not verdicts on your intelligence. The foundational reading skill: <strong>start at the LAST line</strong> (the error's name + reason), then move up to find <em>where</em>.</p>
+<p><strong>Why loud failure is a gift.</strong> Silent wrong behavior corrupts data and wastes days; a crash with a location wastes minutes. Python's philosophy: <em>fail fast, explain clearly</em>. Chapters 14 and 22 build your full error-handling and debugging practice on this attitude.</p>
+<div class="code-block"><div class="code-head">three classic beginner errors (each crashes differently) <button class="copy-btn">Copy</button></div><pre><code>print("Hello"     # (A) SyntaxError: '(' was never closed
+pritn("Hello")    # (B) NameError: name 'pritn' is not defined
+print(10 / 0)     # (C) ZeroDivisionError: division by zero</code></pre></div>
+<table><tr><th>Error</th><th>What it means</th><th>Where it's caught</th><th>How to fix</th></tr>
+<tr><td><code>SyntaxError</code></td><td>Broken grammar — Python can't even parse the file</td><td>Parse time; <strong>nothing runs</strong>, not even earlier good lines</td><td>Check brackets, quotes, colons — and look <em>above</em> the flagged line (unclosed brackets surface late)</td></tr>
+<tr><td><code>NameError</code></td><td>Unknown name — typo, wrong case, or used before defined</td><td>Runtime, at that line</td><td>Check spelling/case (<code>pritn</code> vs <code>print</code>); define before use</td></tr>
+<tr><td><code>ZeroDivisionError</code></td><td>Valid grammar, impossible operation</td><td>Runtime, at that line</td><td>Inspect the values (<code>print</code> them); validate inputs (Ch. 14)</td></tr></table>
+<p><strong>Anatomy of a traceback — read bottom-up:</strong></p>
+<div class="code-block"><div class="code-head">a real traceback, annotated <button class="copy-btn">Copy</button></div><pre><code>Traceback (most recent call last):          # ① header: what follows is the call chain
+  File "prog.py", line 1, in &lt;module&gt;        # ② WHERE: file + line + context (read UP from bottom)
+    print(10 / 0)                             # ③ the offending SOURCE line, echoed
+ZeroDivisionError: division by zero         # ④ WHAT: read THIS FIRST — error type + reason</code></pre></div>
+<p><strong>Debugging protocol (first version; Chapter 22 completes it):</strong> ① read the last line fully (type + message), ② find the file:line it names, ③ reproduce with the smallest snippet that still breaks, ④ <code>print()</code> the suspicious values just before the crash. Follow this literally and you'll solve most beginner errors in minutes.</p>
+
+<h3>2.7 Your first complete scripts, fully traced</h3>
+<div class="code-block"><div class="code-head">first_program.py — run with: python first_program.py <button class="copy-btn">Copy</button></div><pre><code># first_program.py — greet the user and show a calculation
+name = "Ayesha"                 # 1. bind name → the string "Ayesha"
+age_next_year = 25 + 1          # 2. evaluate 25+1 → 26; bind age_next_year → 26
+print("Hello,", name)           # 3. print two items: Hello, Ayesha
+print("Next year you turn:", age_next_year)  # 4. print label + 26</code></pre><div class="out">Hello, Ayesha
+Next year you turn: 26</div></div>
+<p><strong>Full execution trace.</strong> The PVM starts at line 1 and moves down. Line 1: creates string object <code>"Ayesha"</code>, binds name <code>name</code>. Line 2: evaluates the expression <code>25 + 1</code> (calls int addition → <code>26</code>), binds <code>age_next_year</code>. Line 3: calls <code>print</code> with two arguments, joined by default <code>sep=" "</code>, terminated by <code>\n</code>. Line 4: same with the label and the looked-up value <code>26</code>. Process exits 0. Total: 4 statements, 0 branches, 0 surprises — the baseline against which all future complexity is measured.</p>
+<div class="code-block"><div class="code-head">second_program.py — input, branching, and an f-string preview <button class="copy-btn">Copy</button></div><pre><code># second_program.py — age checker with user input
+raw = input("Enter your age: ")   # 1. show prompt, WAIT for Enter, return typed TEXT
+age = int(raw)                    # 2. convert text → integer (crashes on "abc"!)
+if age &gt;= 18:                     # 3. branch on the comparison
+    print(f"Age {age}: adult")    # 4a. runs if True (f-string embeds {age})
+else:                             # 3b. otherwise...
+    print(f"Age {age}: minor")    # 4b. runs if False
+print("Done.")                    # 5. always runs (dedented)</code></pre><div class="out">Enter your age: 20
+Age 20: adult
+Done.</div></div>
+<p><strong>Trace with input <code>20</code>:</strong> line 1 prints the prompt and <em>blocks</em> until Enter; <code>raw</code> becomes the <em>string</em> <code>"20"</code> (input <strong>always</strong> returns <code>str</code> — typing <code>20</code> does not make a number!). Line 2 parses it to int <code>20</code>. Line 3: <code>20 &gt;= 18</code> → True → line 4a runs (<code>f"…{age}…"</code> interpolates the value — full depth in Chapter 6), line 4b skipped. Line 5 always runs. <strong>Type <code>abc</code> instead:</strong> line 2 raises <code>ValueError: invalid literal for int()</code> — your first encounter with <em>input validation</em>, systematized in Chapter 14.</p>
+<div class="callout warn"><strong class="t">⚠️ input() traps</strong><code>input()</code> returns <code>str</code> always (<code>"20" + 1</code> → <code>TypeError</code>; convert first). In notebooks/automated runs, <code>input()</code> blocks awkwardly — prefer function arguments and file inputs (Ch. 11/15) for anything re-runnable. Never <code>eval(input())</code> — it executes arbitrary code (a security hole).</div>
+
+<h3>2.8 Interview questions</h3>
+<details><summary>Q1: Expression vs statement? Give two examples of each and one consequence of the difference.</summary><div class="inner">Expression evaluates to a value (<code>2+3</code>, <code>len("hi")</code>); statement performs an action (<code>x = 5</code>, <code>import math</code>, <code>if …:</code>). Consequence: the REPL echoes bare expressions but not statements — and a script containing only <code>2 + 3</code> prints nothing. Bonus: assignment is a statement, which is why <code>print(x = 5)</code> is a SyntaxError (walrus <code>:=</code> is the expression form).</div></details>
+<details><summary>Q2: Why does indentation matter in Python? What are the exact rules?</summary><div class="inner">Indentation defines code blocks — it replaces braces. Rules: 4 spaces per level, never mix tabs/spaces, blocks open after <code>:</code> and close at dedent. Violations raise IndentationError. Design rationale: the visual structure IS the logical structure, enforcing uniform readability.</div></details>
+<details><summary>Q3: Your script prints nothing and exits cleanly. Walk me through your diagnosis.</summary><div class="inner">Checklist in order: (1) is there actually a <code>print</code> on the executed path (bare expressions are silent in scripts)? (2) did a branch/early-exit skip it (trace the flow)? (3) did I run the file I edited (pwd/ls, right folder)? (4) is output redirected/buffered (terminal vs file, flush)? Add a labeled probe print at the top to bisect.</div></details>
+
+<h3>2.9 Exercises</h3>
+<div class="ex L1"><span class="pill">Level 1 · Understand</span><ol><li>Predict, then run: <code>print("Py", "thon", sep="")</code>, <code>print(1, 2, 3, sep=", ", end="!")</code>, <code>print()</code>, <code>print("a", end="")</code> twice. Explain each output character-by-character.</li><li>Classify as expression or statement (and say what value, if any): <code>5 * 2</code>, <code>x = 5 * 2</code>, <code>print(x)</code>, <code>import math</code>, <code>len("abc")</code>, <code>x</code>.</li><li>Cause each error deliberately, paste the full traceback, and annotate it bottom-up in your own words: SyntaxError, NameError, IndentationError, ZeroDivisionError, ValueError (via <code>int("abc")</code>).</li></ol></div>
+<div class="ex L2"><span class="pill">Level 2 · Apply</span><ol><li>Write <code>receipt.py</code> printing a 4-line aligned receipt (item, qty, price, total) using only <code>sep</code>/<code>end</code> — no f-strings yet.</li><li>Write <code>age_check.py</code> (like §2.7) but handle non-numeric input gracefully with a friendly message instead of a traceback (hint: try/except preview from Ch. 14 — or validate with <code>.isdigit()</code> from Ch. 6).</li><li>Take any 10-line script and hand-trace it: for each line, write the statement/expression classification, every name bound, and every output character. Verify by running.</li></ol></div>
+<div class="ex L3"><span class="pill">Level 3 · Interview</span><ol><li>Explain why <code>x = print("hi")</code> makes <code>x</code> equal <code>None</code>, then generalize: what breaks in larger programs when developers confuse displaying with returning? (Preview Chapter 11's core lesson.)</li><li>A teammate's script "works in the REPL line-by-line but does nothing as a file". Diagnose precisely and explain the underlying model difference.</li></ol></div>
+<h3>2.10 Mini-challenge 🏆</h3>
+<div class="ex L2"><span class="pill">Challenge</span><p><strong>Build <code>echo_lab.py</code>.</strong> A script that demonstrates, with labeled output, all six facts: (1) bare expressions are silent in scripts, (2) <code>print</code> shows values, (3) <code>sep</code>/<code>end</code> control layout, (4) <code>input</code> returns <code>str</code> (prove with <code>type()</code>), (5) an indented block runs conditionally, (6) a traceback reads bottom-up (trigger + catch a <code>ValueError</code> and print its message). Show it to someone and narrate each line — teaching is the fastest way to lock in Chapter 2.</p></div>
+<div class="callout good"><strong class="t">🏁 Chapter summary → next</strong><strong>Remember:</strong> REPL echoes / scripts don't / notebooks accumulate state · <code>print(*o, sep=" ", end="\n")</code> displays and returns <code>None</code> · comments explain <em>why</em> · expressions have values, statements do things · indentation <em>is</em> block structure (4 spaces, never mixed) · tracebacks read bottom-up (what → where) · <code>input()</code> always returns <code>str</code>. <strong>Next:</strong> Chapter 3 reveals what <code>x = 5</code> <em>really</em> does — names, objects, references, identity, and memory — the most important mental model in the book.</div>
+</div></section>

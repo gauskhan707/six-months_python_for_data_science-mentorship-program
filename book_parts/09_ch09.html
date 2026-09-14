@@ -1,0 +1,161 @@
+<!-- CHAPTER 9 -->
+<section class="chapter" id="ch09">
+<div class="ch-head"><div class="ch-num">9</div><div><div class="kicker">Control flow</div><h2>Conditional Logic</h2></div><div class="ch-tools"><button class="icon-btn bm" title="Bookmark">☆</button><button class="icon-btn done" title="Mark complete">✓</button><span class="chev">▾</span></div></div>
+<div class="ch-body">
+<p><strong>What/why.</strong> Conditionals let programs <em>decide</em>: execute different code for different data. <code>if/elif/else</code> evaluates conditions top-down and runs the <strong>first</strong> True branch — <em>at most one</em> branch ever runs. Combined with <strong>truthiness</strong> (every object's inherent True/False nature, §4.4) and <strong>short-circuiting</strong> (§5.5), conditions stay expressive without verbosity. This chapter also teaches the <em>design</em> of branching: guard clauses that flatten nesting, the ternary for value-choices, and <code>match</code> for structural dispatch.</p>
+
+<h3>9.1 if / elif / else: first-True-wins (with execution traces)</h3>
+<p><strong>What.</strong> <code>if COND:</code> opens a chain; zero or more <code>elif COND:</code> alternatives follow; an optional <code>else:</code> catches "nothing matched". Semantics: test each condition <em>in order</em>; execute the <em>first</em> True branch's block; <em>skip everything else</em> in the chain — including later conditions (which never even evaluate).</p>
+<div class="code-block"><div class="code-head">grading chain, traced <button class="copy-btn">Copy</button></div><pre><code>score = 82
+if score &gt;= 90:        # 82&gt;=90? No → skip block AND move on
+    grade = "A"
+elif score &gt;= 80:      # 82&gt;=80? YES → run block, EXIT whole chain
+    grade = "B"
+elif score &gt;= 70:      # NEVER TESTED (chain already exited!)
+    grade = "C"
+else:                   # skipped (a branch ran)
+    grade = "F"
+print(grade)  # B</code></pre><div class="out">B</div></div>
+<p><strong>Step-by-step.</strong> Condition 1 False → its block skipped, chain continues. Condition 2 True → block runs (<code>grade = "B"</code>), chain <em>exits immediately</em> — condition 3 is never evaluated (prove it: put <code>1/0</code> in an <code>elif</code> after a True branch — no crash!). <code>else</code> runs only when <em>no</em> condition was True. Consequences: (1) <strong>order matters</strong> — put the most specific/highest-threshold first (testing <code>&gt;= 80</code> before <code>&gt;= 90</code> would swallow all A-students into B!); (2) overlapping conditions make later branches <em>dead code</em> — a linter-flagged smell.</p>
+<div class="code-block"><div class="code-head">order matters: the swallowed-A bug <button class="copy-btn">Copy</button></div><pre><code>def grade_bad(s):
+    if s &gt;= 80:      # ❌ catches 95 too — everything ≥80 is "B"!
+        return "B"
+    elif s &gt;= 90:    # DEAD CODE — unreachable (any ≥90 already returned)
+        return "A"
+    return "F"
+
+def grade_good(s):
+    if s &gt;= 90:      # ✅ specific first, general later
+        return "A"
+    elif s &gt;= 80:
+        return "B"
+    return "F"
+
+print(grade_bad(95), grade_good(95))  # B A — same conditions, different ORDER</code></pre><div class="out">B A</div></div>
+<p><strong>Nesting (and its limits).</strong> <code>if</code> blocks can contain further <code>if</code>s for two-dimensional decisions — but each level multiplies the reader's mental state (2 levels = 4 paths, 3 = 8…). Rule: <strong>2 levels occasionally, 3 levels = refactor</strong> (guard clauses §9.4, lookup tables, or extracted functions).</p>
+<div class="code-block"><div class="code-head">nested: outer gate, inner detail <button class="copy-btn">Copy</button></div><pre><code>age, member = 25, True
+if age &gt;= 18:            # outer: which price TABLE?
+    if member:            # inner: which ROW?
+        price = 8
+    else:
+        price = 12
+else:
+    price = 5
+print(price)  # 8</code></pre><div class="out">8</div></div>
+
+<h3>9.2 Truthiness mastery: the complete rulebook</h3>
+<p><strong>What.</strong> In boolean context (<code>if</code>, <code>while</code>, <code>and/or/not</code>, ternary, <code>filter</code>), Python calls <code>bool(obj)</code>: <code>False</code> for the falsy list, <code>True</code> otherwise. <strong>Falsy — the complete, exact list:</strong> <code>False</code>, <code>None</code>, numeric zeros (<code>0, 0.0, 0j, Decimal(0), Fraction(0)</code>), empties (<code>"", b"", [], {}, set(), frozenset(), range(0), ()</code>), and class instances whose <code>__bool__</code> returns False or <code>__len__</code> returns 0. <strong>Everything else — including <code>"False"</code>, <code>"0"</code>, <code>[0]</code>, <code>{"a": 0}</code>, generators, and all custom objects by default — is truthy.</strong></p>
+<div class="code-block"><div class="code-head">idiomatic conditions vs verbose traps <button class="copy-btn">Copy</button></div><pre><code>items, name, age, resp = [], "Ali", 0, "y"
+if items: print("has items")       # ✅ idiomatic — NOT len(items) &gt; 0
+else: print("empty cart")
+if name: print("named")            # ✅ — NOT name != ""
+if age is not None:                # ✅ 0 is VALID data! NEVER `if age:` here
+    print("age known:", age)
+if resp in ("y", "yes"):           # ✅ — NOT == "y" or "yes" (always-True bug!)
+    print("confirmed")
+if (n := len(items)) == 0:         # walrus when you need the value too
+    print(f"cart has {n} items")</code></pre><div class="out">empty cart
+named
+age known: 0
+confirmed
+cart has 0 items</div></div>
+<div class="callout warn"><strong class="t">⚠️ The five truthiness traps (memorize)</strong>① <code>if x == True:</code> → <code>if x:</code> (and <code>== True</code> fails for truthy non-bools like <code>1</code>… actually <code>1 == True</code> is True via int-equality — but <code>"a" == True</code> is False while <code>if "a":</code> passes! — inconsistent, hence banned). ② <code>if age/count/qty:</code> when zero is valid → <code>is not None</code>. ③ <code>if s == "a" or "b":</code> always True → <code>in ("a","b")</code>. ④ <code>bool(user_string)</code> for flags (§3.6 — <code>"False"</code> is truthy!). ⑤ Generators are <em>always truthy</em> (even empty ones — truthiness doesn't consume!) — test emptiness with <code>next(gen, sentinel)</code>, never <code>if gen:</code>.</div>
+
+<h3>9.3 Combining conditions: and/or/not + De Morgan + readability</h3>
+<div class="code-block"><div class="code-head">compound conditions, done readably <button class="copy-btn">Copy</button></div><pre><code>age, member, banned = 25, True, False
+# ✅ Positive, grouped, short-circuited (cheap tests first!):
+if age &gt;= 18 and member and not banned:
+    print("welcome, member")
+# De Morgan's laws — push NOT inward by flipping and↔or:
+#   not (A and B) == (not A) or (not B)
+#   not (A or B)  == (not A) and (not B)
+x = 5
+print(not (x &gt; 0 and x &lt; 10))     # False
+print(not (x &gt; 0) or not (x &lt; 10))  # False — same (De Morgan)
+# Readability: name complex conditions!
+is_working_age = 18 &lt;= age &lt; 65   # chained comparison (§5.4)
+is_eligible = is_working_age and member and not banned
+if is_eligible:
+    print("eligible")</code></pre><div class="out">welcome, member
+False
+False
+eligible</div></div>
+<p><strong>Best practices.</strong> Order <code>and</code>-operands <em>cheap-first, likely-to-fail-first</em> (short-circuit skips the expensive rest: <code>if cheap(x) and costly(x):</code>). Prefer <em>positive</em> conditions (<code>if valid:</code> over <code>if not invalid:</code> — negation taxes every reader). Name any condition needing a comment — the name <em>is</em> the comment. Parenthesize mixed <code>and/or</code> (precedence §5.3).</p>
+
+<h3>9.4 Guard clauses: flatten the pyramid of doom</h3>
+<p><strong>What.</strong> A <em>guard clause</em> handles an edge case with an <em>early return/continue/raise</em> at the top, leaving the main logic flat. It inverts nesting: instead of "if valid: [20 lines] else: error", write "if invalid: error-and-exit; [20 flat lines]".</p>
+<div class="vs"><div class="bad"><strong>❌ Pyramid of doom (3 levels, happy path buried)</strong><br><code>def process(rows):<br>&nbsp;&nbsp;if rows:<br>&nbsp;&nbsp;&nbsp;&nbsp;if valid(rows):<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;if len(rows) &lt; MAX:<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;return analyze(rows)<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;else: return "too many"<br>&nbsp;&nbsp;&nbsp;&nbsp;else: return "invalid"<br>&nbsp;&nbsp;else: return "empty"</code></div><div class="good"><strong>✅ Guards (flat, happy path last and obvious)</strong><br><code>def process(rows):<br>&nbsp;&nbsp;if not rows: return "empty"<br>&nbsp;&nbsp;if not valid(rows): return "invalid"<br>&nbsp;&nbsp;if len(rows) &gt;= MAX: return "too many"<br>&nbsp;&nbsp;return analyze(rows)</code><br>Each line eliminates one case; survivors reach the goal.</div></div>
+<p><strong>Why guards win.</strong> Readers process <em>one eliminated case per line</em> instead of holding nested context; each error sits beside its condition (no scrolling to match <code>else</code>s); adding a new case is one line, not re-indentation surgery. Apply the same shape to loops (<code>if bad: continue</code>) and validation (<code>if bad: raise …</code> — Chapter 14).</p>
+
+<h3>9.5 Ternary + dispatch tables + match</h3>
+<p><strong>Ternary</strong> (<code>A if COND else B</code>) chooses between two <em>values</em> (not blocks):</p>
+<div class="code-block"><div class="code-head">ternary: value-choice, not control flow <button class="copy-btn">Copy</button></div><pre><code>score = 78
+status = "pass" if score &gt;= 60 else "fail"   # ✅ one value-choice
+print(status)
+label = "even" if score % 2 == 0 else "odd"
+print(f"{score} is {label}")
+# Nested ternary — legal but SMELLY (use if/elif for 3+ outcomes):
+grade = "A" if score &gt;= 90 else ("B" if score &gt;= 80 else "C")
+print(grade)  # C
+# Dispatch TABLE beats long elif-chains for value mapping:
+fmt_handlers = {"csv": "parse commas", "json": "parse braces", "xml": "parse tags"}
+print(fmt_handlers.get("json", "unknown format"))  # parse braces — no chain at all!</code></pre><div class="out">pass
+78 is even
+C
+parse braces</div></div>
+<p><strong>Structural matching (<code>match/case</code>, 3.10+).</strong> For <em>shape-based</em> dispatch — different types/structures/patterns, with variable binding:</p>
+<div class="code-block"><div class="code-head">match: dispatch + destructuring <button class="copy-btn">Copy</button></div><pre><code>def describe(value):
+    match value:
+        case None:
+            return "missing"
+        case True | False:          # OR-pattern (bool BEFORE int — §4.4!)
+            return "flag"
+        case int() | float():       # TYPE pattern
+            return "number"
+        case {"name": str(n)}:      # MAPPING pattern + bind n
+            return f"user {n}"
+        case [first, *rest]:        # SEQUENCE pattern + bind
+            return f"list starting {first} (+{len(rest)} more)"
+        case _:
+            return "something else"
+
+for v in [None, True, 3.5, {"name": "Ali"}, [1, 2, 3], "hi"]:
+    print(repr(v), "→", describe(v))</code></pre><div class="out">None → missing
+True → flag
+3.5 → number
+{'name': 'Ali'} → user Ali
+[1, 2, 3] → list starting 1 (+2 more)
+'hi' → something else</div></div>
+<p><strong>When each.</strong> Ternary: one condition, two values, fits on a line. Dict-dispatch: many fixed keys → values/functions (data-driven, extensible without code changes). <code>match</code>: shapes/types/structures with binding (parsers, ASTs, API responses, command routers). if/elif: general boolean logic. Nested ternaries and <code>match</code> for two plain booleans are both over-engineering — match the tool to the shape.</p>
+
+<h3>9.6 DS-flavored branching + debugging conditions</h3>
+<div class="code-block"><div class="code-head">realistic data checks <button class="copy-btn">Copy</button></div><pre><code>def bucket_age(age):
+    if age is None:                 # missing FIRST (None breaks comparisons!)
+        return "unknown"
+    if not isinstance(age, (int, float)) or isinstance(age, bool):
+        return "invalid"            # bool excluded: True is 1 ( §4.4)!
+    if age &lt; 0 or age &gt; 130:
+        return "implausible"
+    if age &lt; 13:
+        return "child"
+    if age &lt; 20:
+        return "teen"
+    return "adult"                  # flat guards — no elif needed with returns!
+
+print([bucket_age(a) for a in [None, True, -5, 8, 16, 30, "x"]])</code></pre><div class="out">['unknown', 'invalid', 'implausible', 'child', 'teen', 'adult', 'invalid']</div></div>
+<div class="callout bad"><strong class="t">🛠️ Debugging conditions</strong>Wrong branch taken? (1) Print the <em>condition values</em>, not your assumptions: <code>print(f"{age=!r}, {type(age)=}")</code> (!r shows hidden spaces/quotes). (2) Test each sub-condition separately. (3) Suspect types: <code>"25" &gt;= 18</code> → TypeError in Py3 (no str↔int comparison — convert first!). (4) Suspect <code>None</code> (<code>None &gt; 0</code> → TypeError — guard None first, as above).</div>
+
+<h3>9.7 Interview questions</h3>
+<details><summary>Q1: How does if/elif/else execute? Why does order matter? What never evaluates?</summary><div class="inner">Top-down, first-True-branch-wins, at most one runs. Order matters because earlier branches swallow overlapping cases (§9.1's swallowed-A demo — dead code below). Conditions after a True branch never evaluate (side effects skipped — exploitable for guards, dangerous if you relied on them).</div></details>
+<details><summary>Q2: List all falsy values. Why is `if items:` better than `if len(items) &gt; 0:`? What's the generator exception?</summary><div class="inner">False, None, numeric zeros, empty str/bytes/containers, range(0), __bool__/__len__-falsy objects. <code>if items:</code> is shorter, faster (no call), and generic. Exception: generators are always truthy regardless of emptiness — probe with <code>next(g, sentinel)</code>.</div></details>
+<details><summary>Q3: What are guard clauses and why do professionals prefer them?</summary><div class="inner">Early-exit handling of edge cases (return/continue/raise) that flattens nesting. Benefits: one case per line, errors beside conditions, happy path prominent at the end, new cases = one line. The alternative pyramid buries logic and complicates diffs.</div></details>
+<details><summary>Q4: Ternary vs if/else vs dict-dispatch vs match — when each?</summary><div class="inner">Ternary: single value-choice on one line. if/else: general logic/blocks. Dict-dispatch: fixed key→value/function mapping (data-driven, no chain). match: structural patterns with binding (types, shapes, sequences, mappings). Nested ternaries and match-for-booleans are smells.</div></details>
+
+<h3>9.8 Exercises</h3>
+<div class="ex L1"><span class="pill">Level 1 · Understand</span><ol><li>Fix <code>if resp == "y" or "yes":</code> and prove the original is always-True with <code>resp = "no"</code>. Explain the parse.</li><li>Write correct checks for: non-empty list, provided-but-zero age, non-blank string (strip first!), non-None config. Explain each choice.</li><li>Trace the §9.1 chain with scores 95/85/75/65, listing every evaluated condition and skipped block.</li></ol></div>
+<div class="ex L2"><span class="pill">Level 2 · Apply</span><ol><li><code>shipping(weight, express, member)</code>: base $5 + $1.2/kg, ×1.8 if express, −20% if member, validation guards for negatives. Test 6 cases incl. edges.</li><li>Rewrite a 20-line nested validator as guard clauses; count indent levels before/after.</li><li>Build a <code>match</code> router for API payloads: <code>{"op": "add", "args": [...]}</code>, <code>{"op": "get", "key": …}</code>, malformed → error dict. Bind and use the variables.</li></ol></div>
+<div class="ex L3"><span class="pill">Level 3 · Interview</span><ol><li>Design <code>bucket_age</code> (§9.6) for a hostile reviewer: defend every branch's order (None? bool? type? range?) and name what breaks if two branches swap.</li><li>Refactor a 5-branch elif value-mapper into dict-dispatch with a default; argue when you'd switch back to elif (hint: non-hashable keys, range conditions, side effects).</li></ol></div>
+<h3>9.9 Mini-challenge 🏆</h3>
+<div class="ex L2"><span class="pill">Challenge</span><p><strong>Build <code>rules_engine.py</code>.</strong> A tiny data-validation engine: rules as a list of <code>(name, predicate_fn, message)</code> triples; <code>validate(row)</code> returns all violated messages (guards inside, dispatch outside). Validate 10 messy user-rows (bad ages, blank names, invalid emails) and print a per-row pass/fail report. Predicates + guard clauses + dispatch — the exact architecture of production validators, in 40 lines.</p></div>
+<div class="callout good"><strong class="t">🏁 Chapter summary → next</strong><strong>Remember:</strong> first-True-wins (order specific→general; later conditions never evaluated) · truthiness complete-list + 5 traps · <code>and/or</code> cheap-first, name complex conditions, De Morgan to simplify · guards flatten pyramids · ternary for values, dict-dispatch for maps, match for shapes · guard None before comparing. <strong>Next:</strong> Chapter 10 — loops at full depth: for/while mastery, break/continue/else, nested loops, and knowing when not to loop at all.</div>
+</div></section>

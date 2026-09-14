@@ -1,0 +1,87 @@
+<!-- CHAPTER 17 -->
+<section class="chapter" id="ch17">
+<div class="ch-head"><div class="ch-num">17</div><div><div class="kicker">Scale &amp; ecosystem</div><h2>Virtual Environments and Package Management</h2></div><div class="ch-tools"><button class="icon-btn bm" title="Bookmark">☆</button><button class="icon-btn done" title="Mark complete">✓</button><span class="chev">▾</span></div></div>
+<div class="ch-body">
+<p><strong>What/why.</strong> Real projects depend on external packages with <em>conflicting version needs</em> (Project A requires Pandas 1.5's behavior; Project B needs Pandas 2.0's). Installing everything into one global Python = <strong>dependency hell</strong>: upgrading for B silently breaks A ("but it worked yesterday!"). A <strong>virtual environment</strong> is an isolated, per-project Python setup (own interpreter link + own <code>site-packages</code>); <strong>pip</strong> installs packages into the <em>active</em> environment; a <strong>requirements file</strong> records exact versions so anyone (teammate, CI, future-you) can recreate the setup bit-for-bit. <strong>No venv = not reproducible = not professional.</strong> This chapter makes isolation reflexive.</p>
+
+<h3>17.1 The problem: dependency hell, concretely</h3>
+<div class="diagram"><strong>Figure 17.1 — One global Python vs isolated venvs</strong><div class="two-col"><div><strong>❌ Global installs (hell)</strong><div class="flow"><div class="fstep">/usr/lib/python3.12/site-packages</div><div class="farrow">↓ shared by ALL projects</div><div class="fstep">pandas==2.2 (B needs it)</div><div class="farrow">↓ breaks</div><div class="fstep">Project A (needed pandas 1.5!) 💥</div></div></div><div><strong>✅ venv per project</strong><div class="flow"><div class="fstep">projA/.venv → pandas==1.5.3 ✓</div><div class="farrow">· isolated ·</div><div class="fstep">projB/.venv → pandas==2.2.2 ✓</div><div class="farrow">· both green ·</div><div class="fstep">system python untouched ✓</div></div></div></div></div>
+<p><strong>Why versions conflict in practice.</strong> Libraries evolve: bug fixes (safe), features (safe-ish), <em>breaking changes</em> (removed args, renamed methods, new defaults — Pandas 2.0's copy-on-write changed mutation semantics!). Your code pins to <em>behavior you tested</em>; the global upgrade moves the floor. Venvs freeze each project's floor independently. Bonus isolation: <em>system Python protection</em> — your OS uses its Python for itself; <code>sudo pip install</code> once broke Ubuntu upgrades famously (Debian now blocks it entirely — PEP 668's "externally managed" error, which is the OS begging you to use a venv).</p>
+
+<h3>17.2 The daily workflow (memorize this sequence)</h3>
+<div class="code-block"><div class="code-head">venv lifecycle: create → activate → verify → install → freeze → recreate <button class="copy-btn">Copy</button></div><pre><code># 1. CREATE (once per project, at project root):
+python -m venv .venv
+# 2. ACTIVATE (every NEW terminal — activation is per-shell!):
+# macOS/Linux (bash/zsh):   source .venv/bin/activate
+# Windows cmd:               .venv\Scripts\activate.bat
+# Windows PowerShell:        .venv\Scripts\Activate.ps1
+# 3. VERIFY you are INSIDE it (prompt shows (.venv) — trust, but verify):
+python -c "import sys; print(sys.executable)"
+# .../myproj/.venv/bin/python  ← path MUST contain .venv!
+pip install --upgrade pip            # fresh venvs ship old pip — upgrade first
+# 4. INSTALL what you need:
+pip install pandas matplotlib requests
+# 5. FREEZE exact versions (the reproducibility contract):
+pip freeze &gt; requirements.txt
+# 6. RECREATE anywhere (teammate/CI/new machine):
+python -m venv .venv &amp;&amp; source .venv/bin/activate &amp;&amp; pip install -r requirements.txt
+# 7. LEAVE when done:
+deactivate</code></pre></div>
+<p><strong>Step-by-step (what activation actually does).</strong> Surprisingly little: it <em>prepends</em> <code>.venv/bin</code> (or <code>Scripts</code>) to your shell's <code>PATH</code> and tweaks the prompt. That's it — <code>python</code>/<code>pip</code> now resolve to the venv's copies (which point <code>sys.path</code> at the venv's <code>site-packages</code>). Deactivation restores PATH. Consequences: activation is <em>per-terminal</em> (new tab = reactivate!); scripts with absolute venv paths (<code>.venv/bin/python job.py</code>) don't need activation at all (preferred for cron/schedulers — explicit beats ambient).</p>
+<p><strong>What lives inside <code>.venv/</code>.</strong> <code>bin/</code> (python symlinks, pip, activate scripts), <code>lib/pythonX.Y/site-packages/</code> (your installs + <code>pip</code>'s metadata), <code>pyvenv.cfg</code> (base interpreter pointer). Size: ~20MB empty, 100MB–2GB with data stacks. It's <em>disposable by design</em>: corrupted? <code>rm -rf .venv</code> + recreate from <code>requirements.txt</code> (2 minutes) beats debugging it (2 hours). <strong>Never commit <code>.venv/</code></strong> (gitignore it — it's binary-heavy and machine-specific); commit <code>requirements.txt</code> + the Python version.</p>
+
+<h3>17.3 pip: installing precisely (specifiers, upgrades, inspection)</h3>
+<div class="code-block"><div class="code-head">pip command map <button class="copy-btn">Copy</button></div><pre><code>pip install requests                 # latest compatible release
+pip install "pandas==2.2.2"          # EXACT pin (quotes guard &lt; &gt; from shells!)
+pip install "numpy&gt;=1.24,&lt;2"        # compatible range (library-style)
+pip install -r requirements.txt      # bulk install from file
+pip install -e .                     # EDITABLE: install THIS project (src/ layout dev!)
+pip install --upgrade pandas         # bump within constraints (then RE-FREEZE!)
+pip show pandas                      # version, location, requires (which venv? check!)
+pip list                             # everything installed here
+pip list --outdated                  # upgrade candidates (upgrade deliberately, test after)
+pip check                            # dependency CONFLICTS? (run after installs!)
+pip cache purge                      # reclaim disk (wheels cached in ~/.cache/pip)</code></pre></div>
+<p><strong>Specifier semantics (PEP 440, the working set).</strong> <code>==2.2.2</code> exact · <code>&gt;=2.0,&lt;3</code> range (comma = AND) · <code>~=2.2</code> compatible-release (≈ <code>&gt;=2.2,&lt;3</code> — same major) · no specifier = latest (fine for experiments, <strong>never for committed files</strong>). pip's resolver backtracks across transitive deps — conflicts surface as loud errors (better than silent breakage!) or <code>pip check</code> findings. When resolution fails: pin the <em>top-level</em> combatants explicitly and let the rest follow.</p>
+<div class="callout warn"><strong class="t">⚠️ pip traps</strong><code>pip</code> vs <code>python</code> mismatch (different installs!) → always <code>python -m pip …</code> (§1.11). Installing outside any venv (global litter) → verify <code>sys.executable</code> first. <code>--upgrade</code> without re-freeze (teammates still on old pins — drift!). Upgrading one package breaking another (run <code>pip check</code> + test suite after every upgrade). <code>sudo pip</code> (system-Python surgery — PEP 668 now refuses; use venvs or <code>pipx</code> for CLI tools).</div>
+
+<h3>17.4 requirements discipline: pins for apps, ranges for libraries</h3>
+<div class="code-block"><div class="code-head">requirements.txt (apps/analyses: EXACT pins) <button class="copy-btn">Copy</button></div><pre><code># requirements.txt — generated: pip freeze (then REVIEW: keep direct deps, note why)
+# App/analysis contract: reproduce MY exact setup, bit for bit.
+numpy==1.26.4
+pandas==2.2.2
+matplotlib==3.8.4
+python-dateutil==2.9.0.post0     # transitive (pulled by pandas/matplotlib) — pinned anyway!
+# Verify after install:
+# python -c "import pandas, numpy, matplotlib; print(pandas.__version__, numpy.__version__)"</code></pre></div>
+<p><strong>Apps pin exactly; libraries range-pin.</strong> An <em>app/analysis</em> ("run MY code identically") freezes every transitive dep (<code>pip freeze</code> output, reviewed). A <em>library</em> ("work inside OTHERS' setups") declares compatible ranges in <code>pyproject.toml</code> (<code>pandas&gt;=2.0,&lt;3</code>) — exact pins in libraries <em>cause</em> conflicts for downstream users. Hybrid pro move: <code>requirements.in</code> (direct deps, ranges, human-edited) compiled to <code>requirements.txt</code> (full transitive freeze) via <code>pip-tools</code> — intent + reproducibility, both.</p>
+<p><strong>The reproducibility stack (full honesty).</strong> Bit-identical reproduction needs: ① Python version (<code>3.12.4</code> — record in README/<code>.python-version</code>), ② pinned direct deps, ③ pinned <em>transitive</em> deps (lockfile!), ④ OS/arch-compatible wheels (Linux/macOS/Windows builds differ — CI matrix!), ⑤ seeds + config for stochastic code (<code>random.seed/stable</code> — Ch. 25). <code>requirements.txt</code> covers ②–③; Docker covers ④; discipline covers ①/⑤. Modern lockers (<code>uv</code>, Poetry, PDM) automate ②–③ with <code>uv.lock</code>/<code>poetry.lock</code> — same principle, stronger guarantees. (Conda/<code>environment.yml</code> is the parallel universe for non-Python binaries — same isolation idea.)</p>
+
+<h3>17.5 Triage guide: "it works on my machine" (ordered checklist)</h3>
+<div class="callout bad"><strong class="t">🛠️ Environment triage (follow in order — 90% solved by step 2)</strong>① <strong>Which interpreter?</strong> <code>python -c "import sys; print(sys.executable)"</code> here vs there — different venv (or venv vs global) is the #1 cause. ② <strong>Which versions?</strong> <code>pip list</code> vs <code>requirements.txt</code> on both sides — drifted pins = drifted behavior. ③ <strong>Which directory?</strong> <code>pwd</code> + shadowing check (§16.2 — a local <code>random.py</code> strikes again). ④ <strong>Which platform?</strong> OS-specific wheels/paths (Windows <code>\</code> vs POSIX <code>/</code>, missing system libs). ⑤ <strong>Stale venv?</strong> (project moved/renamed — venv paths bake absolute locations!) → <code>rm -rf .venv</code> + recreate (2 min, fixes a class of mysteries).</div>
+<div class="code-block"><div class="code-head">.gitignore + README setup block (ship these!) <button class="copy-btn">Copy</button></div><pre><code># .gitignore (essentials for Python projects):
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+.ipynb_checkpoints/
+.DS_Store
+
+# README.md setup block (3 commands to green):
+#   python -m venv .venv
+#   source .venv/bin/activate   (Windows: .venv\Scripts\Activate.ps1)
+#   pip install -r requirements.txt &amp;&amp; python -m pytest -q</code></pre></div>
+
+<h3>17.6 Interview questions</h3>
+<details><summary>Q1: Why virtual environments? Precisely what breaks without them?</summary><div class="inner">Isolation per project (own interpreter-link + site-packages) so dependency versions can't collide across projects or with system Python. Without: upgrading for B breaks A (dependency hell), system tools break (sudo pip), and setups can't be recreated ("works on my machine"). Venv + pinned requirements + recorded Python version = reproducibility. Recreate-cost is ~2 minutes, so venvs are disposable.</div></details>
+<details><summary>Q2: requirements.txt vs pyproject.toml vs lockfiles — who pins what?</summary><div class="inner"><code>requirements.txt</code> (pip freeze): exact transitive pins — app/analysis reproducibility. <code>pyproject.toml</code> dependencies: compatible ranges — library compatibility declarations. Lockfiles (<code>uv.lock</code>/poetry): exact transitive pins + hashes, generated from ranges — both intent and reproducibility. Full stack adds Python version + OS + seeds.</div></details>
+<details><summary>Q3: `pip install X` succeeded but `import X` fails. Diagnose in order.</summary><div class="inner">① <code>pip</code>↔<code>python</code> mismatch (different installs!) — use <code>python -m pip</code> always. ② Wrong venv active (or none) — check <code>sys.executable</code> vs install target (<code>pip show X</code> → Location). ③ Name ≠ import (pip <code>scikit-learn</code> imports as <code>sklearn</code>; <code>Pillow</code> → <code>PIL</code>). ④ Shadowing (§16.2) — <code>print(X.__file__)</code>.</div></details>
+
+<h3>17.7 Exercises</h3>
+<div class="ex L1"><span class="pill">Level 1 · Understand</span><ol><li>Create a venv; activate; prove <code>sys.executable</code> points inside; install one package; <code>pip freeze</code>; deactivate; delete; recreate from the file. Time the recreate.</li><li>Show <code>pip show pandas</code> Location differing between two venvs; explain what activation changed to cause it (<code>echo $PATH</code> before/after).</li></ol></div>
+<div class="ex L2"><span class="pill">Level 2 · Apply</span><ol><li>Run two venvs with <em>different versions</em> of one package; run the same version-printing script in each. Write the README + .gitignore you'd ship.</li><li>Break a venv deliberately (upgrade one package into a <code>pip check</code> conflict); resolve by pinning; document the conflict + resolution.</li></ol></div>
+<div class="ex L3"><span class="pill">Level 3 · Interview</span><ol><li>Compare <code>venv+pip</code> vs <code>uv</code> vs <code>conda</code> on: speed, lock strength, non-Python binaries, disk layout. Recommend one per scenario (solo analysis, team app, GPU/geo stack).</li></ol></div>
+<h3>17.8 Mini-challenge 🏆</h3>
+<div class="ex L2"><span class="pill">Challenge</span><p><strong>Harden a project.</strong> Take any multi-file script: add venv + <code>requirements.txt</code> (frozen, reviewed) + <code>.gitignore</code> + README 3-command setup + a <code>check_env.py</code> asserting (python version, key package versions, cwd-independent imports). Delete your venv, hand the folder to someone (or a fresh terminal), and go green from README alone. If it fails, the README is wrong — fix the README, not the human.</p></div>
+<div class="callout good"><strong class="t">🏁 Chapter summary → next</strong><strong>Remember:</strong> venv per project (<code>.venv/</code>, gitignored, disposable) → activate per shell → verify executable → <code>python -m pip</code> always → freeze reviewed pins (apps exact, libs ranged) → README 3-command green · triage = interpreter → versions → cwd/shadow → platform → recreate · full reproducibility = python + pins + lock + OS + seeds. <strong>Next:</strong> Chapter 18 — object-oriented programming from absolute zero: classes, self, properties, inheritance, dunders, and dataclasses.</div>
+</div></section>

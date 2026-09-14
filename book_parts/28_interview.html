@@ -1,0 +1,47 @@
+<!-- INTERVIEW -->
+<section class="chapter" id="interview">
+<div class="ch-head"><div class="ch-num">🎯</div><div><div class="kicker">Career · synthesis</div><h2>Python Interview Prep</h2></div><div class="ch-tools"><button class="icon-btn bm" title="Bookmark">☆</button><button class="icon-btn done" title="Mark complete">✓</button><span class="chev">▾</span></div></div>
+<div class="ch-body">
+<p><strong>What/why.</strong> Interviews test <em>fluency under pressure</em>: can you explain precisely (theory), code correctly (live), reason about trade-offs (design), and debug systematically (practical)? This section compresses the book into <strong>interview-shaped preparation</strong>: the guaranteed-asked canon (with chapter pointers — never memorize, always <em>understand + demo</em>), live-coding strategy, DS-role specifics, red flags to avoid, and a 2-week prep plan. Every answer here should be reproducible <em>on a whiteboard with a marker</em> — that's the bar.</p>
+
+<h3>I.1 The canon: 15 guaranteed questions (answer + demo each!)</h3>
+<table><tr><th>#</th><th>Question</th><th>Answer spine (expand live!)</th><th>Ch</th></tr>
+<tr><td>1</td><td>Mutable vs immutable? Consequences?</td><td>Identity vs value semantics: aliasing, <code>==</code> vs <code>is</code>, hashability (dict keys!), default-arg trap. DEMO: <code>a=b=[]; a.append(1)</code> + tuple-with-list.</td><td>3–4</td></tr>
+<tr><td>2</td><td>List vs tuple vs set vs dict — when each?</td><td>Ordered/mutable (list) · ordered/fixed/hashable (tuple) · unique/fast-membership (set) · keyed lookup (dict). DEMO: dedupe + band-count + record shapes.</td><td>7–8</td></tr>
+<tr><td>3</td><td>List comprehension vs generator?</td><td>Eager list (reuse/index/len, O(n) RAM) vs lazy iterator (single-pass, O(1)). DEMO: <code>getsizeof</code> + pipeline; <code>sum(x for …)</code>.</td><td>13/19</td></tr>
+<tr><td>4</td><td>Decorators: what + write one?</td><td><code>@d def f ≡ f=d(f)</code> at def-time; closure wrapper; <code>wraps</code>; factory=3 levels; stacking order. DEMO: timer from memory (§21.1).</td><td>21</td></tr>
+<tr><td>5</td><td>Context managers: how? Write one?</td><td>enter→body→exit-always (outcome-visible); class vs <code>@contextmanager</code>+try/finally; suppression. DEMO: temp_flag or cd (§21.6).</td><td>21</td></tr>
+<tr><td>6</td><td><code>*args/**kwargs</code>? Forwarding?</td><td>Pack/unpack; transparent wrappers <code>f(*a, **k)</code>; keyword-only <code>*</code>; forwarding chains. DEMO: traced wrapper (§11.3).</td><td>11</td></tr>
+<tr><td>7</td><td>LEGB + <code>global/nonlocal</code>?</td><td>Lookup chain; assignment binds local; <code>global</code> rebinding (avoid!); <code>nonlocal</code> for closures (§11.8 counter). DEMO: counter both ways.</td><td>12</td></tr>
+<tr><td>8</td><td>Shallow vs deep copy?</td><td>New-container-shared-items vs recursive clone; <code>copy()</code> slicing vs <code>deepcopy</code>; nested-mutation surprise. DEMO: <code>[[]]*3</code> + fix.</td><td>3/7</td></tr>
+<tr><td>9</td><td>Exception handling done right?</td><td>Narrow excepts, else/finally, chaining (<code>from</code>), custom hierarchies, per-row quarantine. DEMO: parse-float pipeline (§14.5).</td><td>14</td></tr>
+<tr><td>10</td><td>OOP: self/inheritance/super/dunder?</td><td><code>self</code>=instance binding; inheritance=IS-A+override; <code>super()</code>=MRO coop; dunders=protocols (<code>__len__/__eq__</code>). DEMO: dataclass + one dunder.</td><td>18</td></tr>
+<tr><td>11</td><td>GIL? Threads vs processes?</td><td>GIL serializes bytecode → threads for I/O (released on wait), processes for CPU (own GILs), async for fan-out. DEMO: executor map (§24.5).</td><td>24</td></tr>
+<tr><td>12</td><td>How do you debug?</td><td>8-step workflow: bottom-up traceback → repro-minimal → one-hypothesis → cause-fix → regression test. DEMO: narrate a real bug story.</td><td>22</td></tr>
+<tr><td>13</td><td>Big-O of your solution? (always asked!)</td><td>State time+space with reasoning (nested? hashing? sort?); offer the faster structure. DEMO: membership list→set live (§24.2).</td><td>24</td></tr>
+<tr><td>14</td><td>Handle a 10GB file on 4GB RAM?</td><td>Stream (generator pipeline, O(1)), chunk outputs, never materialize; profile with tracemalloc. DEMO: §19.5 sketch from memory.</td><td>15/19</td></tr>
+<tr><td>15</td><td>Reproducible Python project?</td><td>venv + frozen requirements + seeds logged + README 3-commands + tests. DEMO: §17.6 flow + seed discipline (§25.4).</td><td>17/23/25</td></tr></table>
+
+<h3>I.2 Live-coding strategy (the performance, not just the code)</h3>
+<div class="vs"><div class="good"><strong>✅ Do (scores points)</strong><br>Repeat the problem + examples back (alignment!) · ask edge-cases (empty? None? dupes? types?) BEFORE coding · narrate approach + Big-O FIRST (verbal design!) · brute-force then optimize (working > clever!) · test with 3 cases aloud (happy/edge/error) · name well + guard + comment WHY.</div><div class="bad"><strong>❌ Don't (red flags!)</strong><br>Silent coding (they can't score thoughts!) · jumping to code with no plan · ignoring edge cases (until prompted twice) · clever one-liners needing explanation · "it works, dunno why" · blaming the language · never testing (not even mentally!).</div></div>
+<p><strong>The 5 classic live problems (drill until fluent).</strong> ① FizzBuzz-with-twist (guards + test table). ② Word-frequency top-N (Counter + stopwords + ties!). ③ Parse CSV → per-group means (csv + defaultdict + float-safe). ④ Flatten nested lists (recursion + base cases + depth limit!). ⑤ Retry-with-backoff decorator (factory + wraps + re-raise — §21.2 verbatim!). Each: state Big-O, handle 2+ edges, write 3 asserts.</p>
+
+<h3>I.3 DS-role specifics (Python + data expectations)</h3>
+<table><tr><th>They'll probe</th><th>What "good" looks like</th><th>Your ammo</th></tr>
+<tr><td>Dirty-data handling</td><td>Reject-with-reason, quarantine, counts logged, never silent</td><td>§14.5 + §25.4 + P4 (narrate the pipeline!)</td></tr>
+<tr><td>Memory at scale</td><td>O(1) streaming default, materialize deliberately, tracemalloc evidence</td><td>§19.5 + §24.4 (quote the math!)</td></tr>
+<tr><td>Reproducibility</td><td>Seeds logged, envs frozen, runs deterministic, byte-identical re-runs</td><td>§17.6 + §25.4 + P4/P5 (prove it!)</td></tr>
+<tr><td>Code you'd ship</td><td>Pure core + shell, hints, tests, logging, README, review-checklist</td><td>Ch. 23 + Projects on GitHub (show them!)</td></tr>
+<tr><td>SQL + stats readiness</td><td>Honest Part-2 plan (not bluffing!): "learning joins/distributions next, here"</td><td>Roadmap §25.5 (ambition + honesty beats bluffing!)</td></tr></table>
+<p><strong>Portfolio > promises.</strong> Five GitHub projects with READMEs + tests + green runs beat any certificate. Walk interviewers through P4's quarantine design or P5's k-NN-from-scratch — <em>decisions and trade-offs</em>, not just code. Commit history showing iteration (not one giant dump!) signals real process.</p>
+
+<h3>I.4 Two-week prep plan (hours, not wishes)</h3>
+<table><tr><th>Day</th><th>Focus (2–3 hrs)</th><th>Deliverable</th></tr>
+<tr><td>1–2</td><td>Canon Q1–7: answer aloud + whiteboard demos</td><td>Recordings/transcripts of yourself (cringe = growth!)</td></tr>
+<tr><td>3–4</td><td>Canon Q8–15 + Big-O drills on every answer</td><td>One-page cheat sheet (from memory!)</td></tr>
+<tr><td>5–7</td><td>Live-coding 5 classics, timed (25 min each), narrated</td><td>5 solutions + test tables + Big-O notes</td></tr>
+<tr><td>8–10</td><td>DS scenarios: dirty CSV, 10GB file, repro project (build!)</td><td>3 mini-demos runnable from your laptop</td></tr>
+<tr><td>11–12</td><td>Mock interviews (peer/AI/mirror): full performance</td><td>Feedback log + fixed weaknesses</td></tr>
+<tr><td>13–14</td><td>Portfolio polish: READMEs, pins, green tests, story prep</td><td>"Walk me through a project" — 5-min version each</td></tr></table>
+<div class="callout good"><strong class="t">🏁 Interview summary → next</strong><strong>Remember:</strong> canon-15 with live demos (never recite — SHOW!) · narrate-first live coding (align → edges → design+Big-O → brute → optimize → test-aloud) · DS ammo (quarantine/streaming/seeds/shipped-code) · portfolio proof (GitHub > certificates) · 2-week plan (hours logged, mocks done). <strong>Next:</strong> Exercise answers + Mastery Checkpoint — verify everything, then earn Part 1.</div>
+</div></section>

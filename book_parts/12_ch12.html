@@ -1,0 +1,114 @@
+<!-- CHAPTER 12 -->
+<section class="chapter" id="ch12">
+<div class="ch-head"><div class="ch-num">12</div><div><div class="kicker">Abstraction</div><h2>Scope and Namespaces</h2></div><div class="ch-tools"><button class="icon-btn bm" title="Bookmark">☆</button><button class="icon-btn done" title="Mark complete">✓</button><span class="chev">▾</span></div></div>
+<div class="ch-body">
+<p><strong>What/why.</strong> A <strong>namespace</strong> is a mapping of names → objects: a function's locals, a module's globals, the builtins, a class's attributes, a comprehension's scope. <strong>Scope</strong> is the region of code where a namespace is directly visible. Python resolves <em>every</em> name reference with one rule — <strong>LEGB</strong>: search <strong>L</strong>ocal → <strong>E</strong>nclosing → <strong>G</strong>lobal → <strong>B</strong>uilt-in, stopping at the first hit. This single rule explains shadowing, <code>UnboundLocalError</code>, why <code>global</code>/<code>nonlocal</code> exist, why loop variables leak but comprehension variables don't, and why closures work. Short chapter, foundational payoff.</p>
+
+<h3>12.1 Namespaces: kinds, lifetimes, and how to inspect them</h3>
+<p><strong>What — the five namespace kinds:</strong></p>
+<ul>
+<li><strong>Local:</strong> a function call's frame — parameters + body bindings. Born at call, dead at return (except cells captured by closures — §11.7). Inspect: <code>locals()</code>.</li>
+<li><strong>Enclosing:</strong> outer function frames surrounding nested <code>def</code>s — the closure capture zone. Lifetimes extend while closures reference them.</li>
+<li><strong>Global (= module):</strong> a module's top-level bindings. "Global" really means <em>module-global</em> — each module has its own (that's why <code>import</code> doesn't collide across files). Lives for the process. Inspect: <code>globals()</code>.</li>
+<li><strong>Built-in:</strong> <code>len, print, str, …</code> (+ exceptions, <code>True/False/None</code>). Always last in line. Inspect: <code>dir(__builtins__)</code>.</li>
+<li><strong>Attribute/class namespaces:</strong> <code>obj.attr</code>, class bodies — resolved by the <em>attribute protocol</em> (Chapter 18), not LEGB. (LEGB covers <em>bare names</em>; dotted names are a different lookup.)</li>
+</ul>
+<div class="code-block"><div class="code-head">namespaces are dicts (mostly) — inspect them <button class="copy-btn">Copy</button></div><pre><code>x = "global"
+def outer():
+    x = "enclosing"
+    y = 1
+    print("locals in outer:", sorted(locals().keys()))  # ['x', 'y'] (+ maybe inner later)
+    def inner():
+        x = "local"
+        print("inner sees:", x)   # L wins → 'local'
+    inner()
+    print("outer sees:", x)       # E → 'enclosing'
+outer()
+print("module sees:", x)          # G → 'global'
+print("globals has x:", "x" in globals())
+print("len" in dir(__builtins__)) # B → True</code></pre><div class="out">locals in outer: ['x', 'y']
+inner sees: local
+outer sees: enclosing
+module sees: global
+globals has x: True
+True</div></div>
+<div class="diagram"><strong>Figure 12.1 — LEGB lookup order (inside-out, first hit wins)</strong><div class="flow"><div class="fstep">L — Local: current frame (params + body names)</div><div class="farrow">↓ not found?</div><div class="fstep">E — Enclosing: outer defs, nearest first (closures live here)</div><div class="farrow">↓ not found?</div><div class="fstep">G — Global: this module's top level</div><div class="farrow">↓ not found?</div><div class="fstep">B — Built-in: len, print, str… → else NameError</div></div></div>
+
+<h3>12.2 The assignment rule (the sentence that explains UnboundLocalError)</h3>
+<p><strong>What — the rule, exact:</strong> <em>reading</em> a name searches LEGB at runtime; but <strong>any assignment to a name <em>anywhere</em> in a function body makes that name <em>local everywhere</em> in that function — decided at <em>compile time</em>, before a single line runs.</strong> So reading it <em>before</em> the local assignment executes → <code>UnboundLocalError</code> (a subclass of NameError), even if a global of the same name exists and even if the assignment sits in a branch that never runs.</p>
+<div class="code-block"><div class="code-head">UnboundLocalError: cause + three fixes <button class="copy-btn">Copy</button></div><pre><code>count = 0
+def bad():
+    print(count)   # 💥 UnboundLocalError — 'count' is LOCAL here (assigned on next line)
+    count = 1      # ...this assignment, ANYWHERE in body, poisons the whole body
+# bad()  # uncomment to see: UnboundLocalError: cannot access local variable 'count'
+
+# Fix 1 — global: rebind the MODULE name (works, but smelly — §12.4)
+def fix_global():
+    global count
+    count += 1     # rebinding needs the declaration...
+
+def fix_param(c):  # Fix 2 — PURE (best): pass in, return out. No shared state.
+    return c + 1
+
+bag = [0]
+def fix_mutate():  # Fix 3 — MUTATE without rebinding: no declaration needed!
+    bag.append(1)  # lookup finds global; .append mutates (no assignment to 'bag')
+    print("len:", len(bag))
+
+fix_global(); print(count)   # 1
+count = fix_param(count); print(count)  # 2
+fix_mutate()</code></pre><div class="out">1
+2
+len: 2</div></div>
+<p><strong>Step-by-step (the <code>+=</code> case).</strong> <code>count += 1</code> means <code>count = count + 1</code>: the <em>right side reads</em> (LEGB → would find global… but the name is already classified <em>local</em> at compile time because of the assignment) → read of unbound local → UnboundLocalError. <code>global count</code> reclassifies the name as module-level for the whole body — reads and writes both hit the module. <code>bag.append(1)</code> involves <em>no assignment to <code>bag</code></em> — pure LEGB read finds the global list, method mutates it. (Still avoid globals — §12.4.)</p>
+<p><strong><code>nonlocal</code> (closures' write key, §11.7).</strong> <code>nonlocal n</code> reclassifies a name as <em>enclosing-function-level</em> (nearest enclosing binding, compile-checked — error if none exists). Three rebinding scopes, three declarations: local (default), enclosing (<code>nonlocal</code>), module (<code>global</code>). There is no "nonlocal-or-global" fallback — Python demands you say which.</p>
+
+<h3>12.3 Shadowing, leaks, and comprehension scope</h3>
+<div class="code-block"><div class="code-head">shadowing (legal, confusing) + the leak asymmetry <button class="copy-btn">Copy</button></div><pre><code>len = "oops"          # ⚠️ shadows the BUILTIN in this module (works until you call len()!)
+print(len)            # 'oops' — G shadows B (LEGB!)
+del len               # restore sanity (deletes module binding; builtin visible again)
+print(len("abc"))     # 3 — phew
+
+for i in range(3):    # for-targets bind in the ENCLOSING function scope...
+    pass
+print("leaked:", i)   # 2 — ...and LEAK after the loop (§10.5)
+# Comprehension targets do NOT leak (own implicit scope since Py3):
+vals = [j * 2 for j in range(3)]
+try:
+    print(j)
+except NameError as e:
+    print("no leak:", e)
+# Same for generator expressions, dict/set comprehensions, lambda params, except-as (deleted after!):
+try:
+    1 / 0
+except ZeroDivisionError as e:
+    print("caught:", e)
+try:
+    print(e)  # NameError! `except ... as e` is DELETED at block end (avoids cycle refs)
+except NameError:
+    print("except-target cleaned up ✓")</code></pre><div class="out">oops
+3
+leaked: 2
+no leak: name 'j' is not defined
+caught: division by zero
+except-target cleaned up ✓</div></div>
+<p><strong>Why the asymmetry.</strong> <code>for</code>/<code>while</code>/<code>if</code> create <em>no scope</em> in Python — only <code>def</code>, <code>class</code>, <code>lambda</code>, comprehensions/generator-expressions, and <code>except-as</code> (deleted after) manage bindings specially. Rationale: flat is simple; functions are the unit of isolation. Practical fallout: reuse of loop names (<code>i</code>, <code>row</code>) across distant loops in one long function causes stale-value bugs — another reason functions stay short (Ch. 11/23).</p>
+<div class="callout warn"><strong class="t">⚠️ Shadowing traps</strong>Module name shadows builtin (<code>list/str/id/sum/type</code> — §3.5's ban) · parameter shadows global (reader confusion — rename one) · local shadows enclosing (usually a bug — did you forget <code>nonlocal</code>?) · <code>from x import *</code> silently shadows (Chapter 16's ban). Linters flag all four automatically.</div>
+
+<h3>12.4 Best practices: why global is a smell (and what replaces it)</h3>
+<p><strong>Why <code>global</code> hurts.</strong> It creates <em>hidden coupling</em>: the function's behavior depends on invisible module state (untestable in isolation, order-dependent, un-reusable across threads/contexts, refactor-hostile — every reader must hold the whole module in mind). Globals also defeat the "fresh frame per call" isolation (§11.1) that makes functions trustworthy.</p>
+<p><strong>Replacements, by situation:</strong> shared config → <em>parameters with defaults</em> or a frozen <code>dataclass</code> passed around (Ch. 18); accumulated state → <em>return values</em> (<code>total = process(total, row)</code>), <em>closures</em> (§11.7), or a <em>class</em> (Ch. 18); module-level constants → <code>UPPER_SNAKE</code> globals that are <em>read, never rebound</em> (reading globals is harmless — only <em>rebinding</em> needs <code>global</code> and creates the smell); true singletons/caches → explicit objects with clear ownership. Legitimate <code>global</code> uses exist (lazy one-time init, registry patterns) — they're rare, documented, and wrapped in functions.</p>
+
+<h3>12.5 Interview questions</h3>
+<details><summary>Q1: State LEGB with one example per level, and say what happens on total miss.</summary><div class="inner">Local (frame: params/body) → Enclosing (outer defs, nearest first) → Global (module top) → Built-in (len/print/…) → NameError. Example: nested defs each binding <code>x</code> plus a module <code>x</code> plus builtin use — innermost wins at each print (§12.1 code). Note: attribute lookups (<code>obj.x</code>) bypass LEGB entirely (Chapter 18's protocol).</div></details>
+<details><summary>Q2: Why does `x += 1` on a global fail without `global`, but `lst.append(1)` works?</summary><div class="inner"><code>x += 1</code> is <code>x = x + 1</code> — an <em>assignment</em>, making <code>x</code> local at compile time; the right-side read then hits an unbound local → UnboundLocalError. <code>lst.append(1)</code> <em>assigns nothing to <code>lst</code></em> — LEGB read finds the global, method call mutates it. (Both patterns should usually be replaced by params/returns.)</div></details>
+<details><summary>Q3: Loop variables leak but comprehension variables don't — explain.</summary><div class="inner"><code>for</code> creates no scope — targets bind in the enclosing function (leaking after). Comprehensions/generator-expressions get an implicit function-like scope (Python 3+), so their targets are local and vanish after. Same reason <code>except … as e</code> is deleted after its block (plus cycle-GC hygiene).</div></details>
+
+<h3>12.6 Exercises</h3>
+<div class="ex L1"><span class="pill">Level 1 · Understand</span><ol><li>Reproduce <code>UnboundLocalError</code> in 5 lines; fix it three ways (<code>global</code>, pure params/return, class). Rank the fixes with reasons.</li><li>Write nested <code>outer/middle/inner</code> each binding <code>v</code> differently + module <code>v</code>; print all four from <code>inner</code> (hint: you can only <em>directly</em> see some — explain which and why).</li><li>Show <code>locals()</code> vs <code>globals()</code> differing inside a function; add a name to each and re-inspect.</li></ol></div>
+<div class="ex L2"><span class="pill">Level 2 · Apply</span><ol><li><code>make_averager()</code> with <code>nonlocal</code> total/count (§11.11 twin — now explain the scope mechanics precisely).</li><li>Plant a builtin-shadow bug (<code>sum = 0</code> then <code>sum([1,2])</code>); diagnose from the traceback alone; fix by <code>del</code> + rename. Note what the error message does/doesn't tell you.</li></ol></div>
+<div class="ex L3"><span class="pill">Level 3 · Interview</span><ol><li>Explain <code>fn.__closure__</code> cells: what they hold, when they're None (no capture), and why loop-captured variables surprise (§11.5) — with cell_contents proof.</li></ol></div>
+<h3>12.7 Mini-challenge 🏆</h3>
+<div class="ex L2"><span class="pill">Challenge</span><p><strong>Build <code>scope_lab.py</code>.</strong> Four nested levels each binding the same name + a module binding + a builtin-shadow attempt (safely restored): print, from the innermost level, exactly which binding each bare name resolves to and why (cite L/E/G/B per name). Then trigger, catch, and explain one <code>UnboundLocalError</code> and one shadowing surprise. Annotate every line with its LEGB level — the definitive proof you own name resolution.</p></div>
+<div class="callout good"><strong class="t">🏁 Chapter summary → next</strong><strong>Remember:</strong> namespaces = name→object maps (local/enclosing/module/builtin/attribute) · LEGB inside-out, first hit wins (bare names only) · assignment anywhere ⇒ local everywhere (compile-time!) → UnboundLocalError on read-first · <code>global/nonlocal</code> reclassify for rebinding; mutation needs no declaration · for/if leak (no scope), comprehensions don't · read-globals harmless, rebind-globals smelly (params/returns/closures/classes instead). <strong>Next:</strong> Chapter 13 — comprehensions at full depth: declarative collection-building, and exactly when loops win instead.</div>
+</div></section>

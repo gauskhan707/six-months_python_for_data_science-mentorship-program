@@ -1,0 +1,96 @@
+<footer class="site">
+<div><strong>Deep Data Science &amp; AI — Part 1: Python for Data Science.</strong> Self-contained single-file textbook. Progress, theme, bookmarks, and last position persist in your browser (localStorage) — private to your device.</div>
+<div class="footer-nav">
+<button class="btn" id="prevBtn">◂ Previous</button>
+<button class="btn" id="nextBtn">Next ▸</button>
+<button class="btn" id="printBtn">🖨️ Print / Save PDF</button>
+<button class="btn" id="topBtn">⬆ Top</button>
+</div>
+</footer>
+</main>
+</div>
+<script>
+(function(){
+"use strict";
+var LS={get:function(k,d){try{var v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(e){return d}},set:function(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
+var chapters=Array.prototype.slice.call(document.querySelectorAll('.chapter'));
+var tocList=document.getElementById('tocList'),pctLabel=document.getElementById('pctLabel'),statLine=document.getElementById('statLine');
+var state={done:LS.get('dds1_done',{}),bm:LS.get('dds1_bm',{}),last:LS.get('dds1_last',null),theme:LS.get('dds1_theme','light')};
+/* theme */
+function applyTheme(){document.documentElement.setAttribute('data-theme',state.theme);var b=document.getElementById('themeBtn');b.textContent=state.theme==='dark'?'☀️ Light':'🌙 Dark'}
+applyTheme();
+document.getElementById('themeBtn').onclick=function(){state.theme=state.theme==='dark'?'light':'dark';LS.set('dds1_theme',state.theme);applyTheme()};
+/* build TOC */
+chapters.forEach(function(ch,i){
+  var h=ch.querySelector('h2');var title=(h?h.textContent:'Chapter');
+  var num=ch.querySelector('.ch-num').textContent;
+  var li=document.createElement('li');var a=document.createElement('a');
+  a.href='#'+ch.id;a.innerHTML='<span class="mk"></span>'+num+' · '+title;
+  a.onclick=function(){openCh(ch.id,true)};
+  li.appendChild(a);tocList.appendChild(li);ch._tocMark=a.querySelector('.mk');
+});
+/* open/close */
+function openCh(id,scroll){var ch=document.getElementById(id);if(!ch)return;ch.classList.add('open');state.last=id;LS.set('dds1_last',id);if(scroll){setTimeout(function(){ch.scrollIntoView({behavior:'smooth',block:'start'})},30)}updateStats()}
+function updateStats(){var n=chapters.filter(function(c){return state.done[c.id]}).length;var p=Math.round(100*n/chapters.length);pctLabel.textContent='— '+n+'/'+chapters.length+' ('+p+'%)';statLine.textContent=n+' of '+chapters.length+' sections complete · click a header to expand';chapters.forEach(function(c){var m=c._tocMark;if(m)m.innerHTML=state.done[c.id]?'<span class="done-mark">✓ </span>':'';var d=c.querySelector('.done');if(d)d.classList.toggle('active',!!state.done[c.id]);var b=c.querySelector('.bm');if(b){b.classList.toggle('active',!!state.bm[c.id]);b.textContent=state.bm[c.id]?'★':'☆'}});renderBm();
+document.getElementById('progress-bar').style.width=p+'%'}
+function renderBm(){var p=document.getElementById('bookmarksPanel');var ids=Object.keys(state.bm).filter(function(k){return state.bm[k]});if(!ids.length){p.innerHTML='<em style="color:var(--muted)">No bookmarks yet. Click ☆ on any chapter.</em>';return}p.innerHTML='';ids.forEach(function(id){var ch=document.getElementById(id);if(!ch)return;var a=document.createElement('a');a.href='#'+id;a.textContent='★ '+(ch.querySelector('h2').textContent);a.onclick=function(){openCh(id,true)};p.appendChild(a)})}
+chapters.forEach(function(ch){
+  ch.querySelector('.ch-head').addEventListener('click',function(e){
+    if(e.target.closest('.icon-btn'))return;
+    ch.classList.toggle('open');if(ch.classList.contains('open')){state.last=ch.id;LS.set('dds1_last',ch.id)}
+  });
+  ch.querySelector('.done').onclick=function(e){e.stopPropagation();state.done[ch.id]=!state.done[ch.id];LS.set('dds1_done',state.done);updateStats()};
+  ch.querySelector('.bm').onclick=function(e){e.stopPropagation();state.bm[ch.id]=!state.bm[ch.id];LS.set('dds1_bm',state.bm);updateStats()};
+});
+document.getElementById('expandBtn').onclick=function(){chapters.forEach(function(c){c.classList.add('open')})};
+document.getElementById('collapseBtn').onclick=function(){chapters.forEach(function(c){c.classList.remove('open')});if(state.last){openCh(state.last,false)}};
+document.getElementById('resetBtn').onclick=function(){if(confirm('Reset progress + bookmarks?')){state.done={};state.bm={};LS.set('dds1_done',{});LS.set('dds1_bm',{});updateStats()}};
+document.getElementById('continueBtn').onclick=function(){var id=state.last&&document.getElementById(state.last)?state.last:(chapters[0]&&chapters[0].id);openCh(id,true)};
+document.getElementById('topBtn').onclick=function(){window.scrollTo({top:0,behavior:'smooth'})};
+document.getElementById('printBtn').onclick=function(){chapters.forEach(function(c){c.classList.add('open')});setTimeout(function(){window.print()},200)};
+/* prev/next */
+function curIdx(){var y=window.scrollY+120,idx=0;chapters.forEach(function(c,i){if(c.offsetTop<=y)idx=i});return idx}
+document.getElementById('prevBtn').onclick=function(){var i=Math.max(0,curIdx()-1);openCh(chapters[i].id,true)};
+document.getElementById('nextBtn').onclick=function(){var i=Math.min(chapters.length-1,curIdx()+1);var c=chapters[curIdx()];if(c&&!state.done[c.id]){state.done[c.id]=true;LS.set('dds1_done',state.done);updateStats()}openCh(chapters[i].id,true)};
+/* initial: open first chapter or last */
+if(state.last&&document.getElementById(state.last)){openCh(state.last,false)}else if(chapters[0]){chapters[0].classList.add('open')}
+if(location.hash){var t=document.getElementById(location.hash.slice(1));if(t)t.classList.add('open')}
+updateStats();
+/* syntax highlight (tiny, dependency-free) */
+function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+document.querySelectorAll('pre code').forEach(function(code){
+  var src=code.textContent;var out='',i=0,n=src.length;
+  function isWs(c){return c===' '||c==='\t'||c==='\n'||c==='\r'}
+  var KW='False None True and as assert async await break class continue def del elif else except finally for from global if import in is lambda nonlocal not or pass raise return try while with yield match case'.split(' ');
+  var BI='print len range str int float bool list dict set tuple sum min max abs open isinstance type id sorted enumerate zip map filter super self cls object Exception ValueError TypeError KeyError IndexError AttributeError StopIteration ZeroDivisionError FileNotFoundError RuntimeError NotImplementedError'.split(' ');
+  while(i<n){var c=src[i];
+    if(c==='#'){var j=src.indexOf('\n',i);if(j<0)j=n;out+='<span class="tok-c">'+esc(src.slice(i,j))+'</span>';i=j;continue}
+    if(c==='"'||c==="'"){var q=c,j2=i+1;var triple=src.substr(i,3)===q+q+q;if(triple){j2=src.indexOf(q+q+q,i+3);j2=j2<0?n:j2+3}else{while(j2<n){if(src[j2]==='\\'){j2+=2;continue}if(src[j2]===q){j2++;break}if(src[j2]==='\n')break;j2++}}out+='<span class="tok-s">'+esc(src.slice(i,j2))+'</span>';i=j2;continue}
+    if((c>='0'&&c<='9')||(c==='.'&&i+1<n&&src[i+1]>='0'&&src[i+1]<='9')){var m=/^(\d[\d_]*(?:\.\d*)?(?:[eE][+-]?\d+)?|0[xX][\da-fA-F_]+|0[bB][01_]+)/.exec(src.slice(i));if(m){out+='<span class="tok-n">'+esc(m[1])+'</span>';i+=m[1].length;continue}}
+    if((c>='A'&&c<='Z')||(c>='a'&&c<='z')||c==='_'){var m2=/^[A-Za-z_][A-Za-z0-9_]*/.exec(src.slice(i));var w=m2[0];var k=i+w.length;while(k<n&&isWs(src[k]))k++;var cls='';if(KW.indexOf(w)>=0)cls='tok-k';else if(BI.indexOf(w)>=0)cls='tok-b';else if(src[k]==='(')cls='tok-f';out+=cls?'<span class="'+cls+'">'+esc(w)+'</span>':esc(w);i+=w.length;continue}
+    out+=esc(c);i++;
+  }
+  code.innerHTML=out;
+});
+/* copy buttons */
+document.querySelectorAll('.code-block').forEach(function(block){
+  var btn=block.querySelector('.copy-btn');if(!btn)return;
+  btn.onclick=function(e){e.stopPropagation();var code=block.querySelector('pre code');var txt=code?code.textContent:'';function ok(){btn.textContent='Copied ✓';setTimeout(function(){btn.textContent='Copy'},1500)}
+  if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(txt).then(ok,function(){fallback()})}else fallback();
+  function fallback(){var ta=document.createElement('textarea');ta.value=txt;document.body.appendChild(ta);ta.select();try{document.execCommand('copy');ok()}catch(err){}document.body.removeChild(ta)}};
+});
+/* search */
+var si=document.getElementById('searchInput'),sr=document.getElementById('searchResults');
+var idx=chapters.map(function(ch){var h=ch.querySelector('h2');return{id:ch.id,title:(h?h.textContent:''),text:(ch.querySelector('.ch-body').textContent||'').slice(0,12000)}});
+function doSearch(){var q=si.value.trim().toLowerCase();if(q.length<2){sr.style.display='none';return}
+  var hits=[];idx.forEach(function(e){var t=e.title.toLowerCase(),b=e.text.toLowerCase();var ti=t.indexOf(q),bi=b.indexOf(q);if(ti>=0||bi>=0){var pos=bi>=0?bi:0;var sn=e.text.slice(Math.max(0,pos-60),pos+120).replace(/\s+/g,' ');hits.push({e:e,sn:sn,score:ti>=0?0:1})}});
+  hits.sort(function(a,b2){return a.score-b2.score});hits=hits.slice(0,12);
+  if(!hits.length){sr.innerHTML='<a>No matches. Try "slicing", "LEGB", "decorator".</a>';sr.style.display='block';return}
+  sr.innerHTML='';hits.forEach(function(h){var a=document.createElement('a');var rx=new RegExp('('+q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+')','ig');a.innerHTML='<strong>'+h.e.title+'</strong><br><small>'+h.sn.replace(/</g,'&lt;').replace(rx,'<mark>$1</mark>')+'</small>';a.href='#'+h.e.id;a.onclick=function(){openCh(h.e.id,true);sr.style.display='none'};sr.appendChild(a)});sr.style.display='block'}
+si.addEventListener('input',doSearch);si.addEventListener('focus',doSearch);
+document.addEventListener('click',function(e){if(!e.target.closest('.searchbox'))sr.style.display='none'});
+document.addEventListener('keydown',function(e){if(e.key==='/'&&document.activeElement!==si){e.preventDefault();si.focus()}else if(e.key==='Escape'){sr.style.display='none';si.blur()}else if((e.key==='t'||e.key==='T')&&document.activeElement!==si&&!e.ctrlKey&&!e.metaKey){document.getElementById('themeBtn').click()}});
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,106 @@
+<!-- CHAPTER 24 -->
+<section class="chapter" id="ch24">
+<div class="ch-head"><div class="ch-num">24</div><div><div class="kicker">Craft</div><h2>Performance with Python</h2></div><div class="ch-tools"><button class="icon-btn bm" title="Bookmark">☆</button><button class="icon-btn done" title="Mark complete">✓</button><span class="chev">▾</span></div></div>
+<div class="ch-body">
+<p><strong>What/why.</strong> Slow code has <em>causes</em>, not vibes — and the <strong>first law is MEASURE FIRST</strong>: hunches about hotspots are wrong ~90% of the time (profilers exist because intuition fails). This chapter's ladder: ① <em>Algorithm/structure</em> (O(n²)→O(n), list→set — 1000× wins), ② <em>Vectorize/push loops to C</em> (NumPy/pandas/C-builtins — 100×), ③ <em>Lazy/stream</em> (O(n)→O(1) memory — enables scale), ④ <em>Cache/memoize</em> (recompute→lookup), ⑤ <em>Parallelize</em> (GIL-aware: threads for I/O, processes for CPU) — and ⑥ <em>don't</em> (readable code that meets its budget is done — premature optimization is the root of evil). Targets set the game: is this a 1-second script or a 24/7 service?</p>
+
+<h3>24.1 Measure first: timeit + perf_counter + cProfile (instruments, exact)</h3>
+<div class="code-block"><div class="code-head">the three instruments + their jobs <button class="copy-btn">Copy</button></div><pre><code>import time, timeit, cProfile, pstats, io
+
+# ① timeit: MICRO-benchmark snippets fairly (repeats + disables GC + best-of):
+t_join = timeit.timeit("''.join(str(i) for i in range(1000))", number=200)
+t_plus = timeit.timeit("s=''\nfor i in range(1000): s += str(i)", number=200)
+print(f"join: {t_join:.3f}s  plus-loop: {t_plus:.3f}s  → join wins ~{t_plus/t_join:.0f}×")
+
+# ② perf_counter: MACRO-time blocks in real code (monotonic, ns resolution):
+start = time.perf_counter()
+total = sum(range(1_000_000))
+print(f"sum(1M): {time.perf_counter()-start:.4f}s → {total}")
+
+# ③ cProfile: FIND the hotspot (function-level stats — NEVER guess where time goes!):
+def work():
+    return {i: i*i for i in range(5000)}
+buf = io.StringIO()
+cProfile.run("work()", sort="cumulative", stream=buf) if False else None  # (see note)
+# Real usage:  python -m cProfile -s cumulative script.py  →  per-function table
+print("profile rule: optimize the TOP cumulative row (excl. builtins you can't change)")</code></pre><div class="out">join: 0.042s  plus-loop: 0.310s  → join wins ~7× (varies — join always wins)
+sum(1M): 0.0120s → 499999500000
+profile rule: optimize the TOP cumulative row (excl. builtins you can't change)</div></div>
+<p><strong>Instrument discipline.</strong> <code>timeit</code> for <em>comparing snippets</em> (fair repeats; report best-of, not mean — noise only inflates). <code>perf_counter</code> for <em>timing stages</em> in real runs (log per-stage timings in pipelines — free production telemetry!). <code>cProfile</code> for <em>finding hotspots</em> (sort cumulative; ignore <code>{built-in}</code> noise; drill into YOUR top rows). Re-profile after every change (fixes relocate bottlenecks — yesterday's #2 is today's #1). Never micro-tune unmeasured code — that's astrology, not engineering.</p>
+<div class="callout warn"><strong class="t">⚠️ Benchmarking traps</strong>One run (noise! repeat) · tiny N (constant factors dominate — test realistic sizes) · caching between runs (first-call effects — warm up) · <code>time.time()</code> (wall-clock jumps — use <code>perf_counter</code>) · optimizing what profiles say is 1% (Amdahl: 100× on 1% = 1% total!).</div>
+
+<h3>24.2 Big-O for practitioners: the growth table + the usual crimes</h3>
+<table><tr><th>Growth</th><th>n=10³</th><th>n=10⁶</th><th>Name + example</th></tr>
+<tr><td>O(1)</td><td>1</td><td>1</td><td>Constant: dict/set lookup, append, index</td></tr>
+<tr><td>O(log n)</td><td>~10</td><td>~20</td><td>Log: bisect, balanced-tree ops</td></tr>
+<tr><td>O(n)</td><td>10³</td><td>10⁶</td><td>Linear: single pass, sum, max, map</td></tr>
+<tr><td>O(n log n)</td><td>~10⁴</td><td>~2×10⁷</td><td>Linearithmic: sorted() — the price of order</td></tr>
+<tr><td>O(n²)</td><td>10⁶</td><td>10¹² ✖</td><td>Quadratic: nested loops over same data (THE crime)</td></tr></table>
+<div class="code-block"><div class="code-head">THE crime (O(n²) membership) → THE fix (O(n) set) <button class="copy-btn">Copy</button></div><pre><code>import time
+allowed = list(range(3000))
+probes = list(range(0, 6000, 2))
+t0 = time.perf_counter(); slow = [p for p in probes if p in allowed]; t1 = time.perf_counter()
+allowed_set = set(allowed)
+t2 = time.perf_counter(); fast = [p for p in probes if p in allowed_set]; t3 = time.perf_counter()
+print(f"list-membership: {t1-t0:.3f}s  set-membership: {t3-t2:.4f}s  same={slow == fast}")
+# 9M ==-checks vs 3000 hashes — ~1000× at n=3000, INFINITE gap as n grows (O(n²)→O(n)).</code></pre><div class="out">list-membership: 0.086s  set-membership: 0.0001s  same=True (varies — 100–1000× typical)</div></div>
+<p><strong>Crime blotter (recognize on sight).</strong> <code>x in list</code> inside a loop (→ set!) · dedupe-by-scan (→ dict/set) · <code>list.insert(0, x)</code> / <code>pop(0)</code> in loops (→ <code>deque</code>) · string <code>+=</code> in loops (→ <code>join</code>) · <code>df.append</code> in loops (→ collect + one <code>concat</code> — pandas Part 3!) · re-sorting per query (→ sort once, <code>bisect</code> per query) · nested loops over the same collection (→ index one side into dict/set first). Each is a <em>structure</em> fix — one line, orders of magnitude.</p>
+
+<h3>24.3 Push loops to C: builtins + comprehensions + vectorization preview</h3>
+<div class="code-block"><div class="code-head">the speed ladder (same sum-of-squares) <button class="copy-btn">Copy</button></div><pre><code>import timeit
+N = 2000
+t_loop = timeit.timeit("s=0\nfor i in range(N): s += i*i", globals={"N": N}, number=50)
+t_comp = timeit.timeit("sum(i*i for i in range(N))", globals={"N": N}, number=50)
+t_map  = timeit.timeit("sum(map(lambda i: i*i, range(N)))", globals={"N": N}, number=50)
+print(f"loop: {t_loop:.3f}s  genexpr: {t_comp:.3f}s  map+lambda: {t_map:.3f}s")
+print("ladder: explicit-loop (slowest, bytecode/step) &lt; genexpr/builtin (C-accelerated sum) &lt; numpy (C loop, no per-item boxing — Part 3!)")
+print("(map+lambda ≈ loop: lambda re-adds per-item Python cost — operator (§20.4) or genexpr instead!)")</code></pre><div class="out">loop: ...s  genexpr: ...s  map+lambda: ...s (ratios vary; genexpr beats loop ~1.5–2×; numpy would beat both ~50×)</div></div>
+<p><strong>Why C-wins exist.</strong> Every Python-level operation pays interpreter overhead (bytecode dispatch, object boxing, refcounting — §3.2) per item. Builtins/comprehensions run their <em>inner machinery</em> in C (tight loops, no boxing): <code>sum(genexpr)</code> boxes items but accumulates in C. NumPy (Part 3) removes boxing too (typed arrays, vectorized C loops — 50–100× over Python loops). The ladder rule: <em>fewer Python-steps per item = faster</em> — but readability gates every climb (a clear loop beating its budget stays a loop!).</p>
+
+<h3>24.4 Memory: generators + streaming + __slots__ (O(n) → O(1))</h3>
+<div class="code-block"><div class="code-head">list vs generator footprint (the enabling win) <button class="copy-btn">Copy</button></div><pre><code>import sys
+N = 200_000
+lst = [i*i for i in range(N)]
+gen = (i*i for i in range(N))
+print(f"list: {sys.getsizeof(lst)/1024:.0f} KiB  generator: {sys.getsizeof(gen)} bytes")
+print("math: list pays ~8B pointer + int-object (~28B) per item (~7MB here); generator pays a FRAME (~100B) total.")
+print("rule: STREAM whenever you consume once (§19.5 pipeline!); MATERIALIZE only to reuse/sort/len/index.")
+# tracemalloc (find the LEAK, not just the size):
+#   import tracemalloc; tracemalloc.start() → run → tracemalloc.get_traced_memory() → snapshot.compare_to()
+# __slots__: many small objects (millions of rows-as-objects) — drop per-instance __dict__:
+class Point:
+    __slots__ = ("x", "y")     # fixed fields, no __dict__ (~40-60% smaller per instance!)
+    def __init__(self, x, y):
+        self.x, self.y = x, y</code></pre><div class="out">list: ... KiB  generator: ... bytes (list ~1000× the generator — exact bytes vary)</div></div>
+<p><strong>Memory discipline.</strong> Stream single-pass flows (Ch. 15/19 pipelines scale to ∞ rows at constant RAM). Release big refs promptly (<code>del</code>/scope-exit — CPython refcounts free immediately, §3.2). Prefer iterators across stage boundaries (<code>map/filter/islice</code> — §20.3). Suspect a leak? <code>tracemalloc</code> snapshots diffed across iterations name the growing allocation site (usually: appending cache with no bound, or listeners/handlers never removed).</p>
+
+<h3>24.5 Caching + parallelism: reuse work, then multiply workers (GIL-aware!)</h3>
+<p><strong>Cache (Ch. 20's <code>lru_cache</code>, strategic).</strong> Recompute→lookup for pure, repeated, hashable-arg calls (parsed configs, compiled regexes — <code>re</code> caches internally!, fib-style recursion — §11.6/20.4). Bound it (<code>maxsize</code>) on wild inputs; never cache IO/time/random. <strong>Parallelism (GIL map).</strong> CPython's GIL serializes <em>Python bytecode</em> across threads — so: <strong>threads</strong> for <em>I/O-bound</em> (network/disk waits release the GIL — <code>concurrent.futures.ThreadPoolExecutor</code>, 10–100× throughput on fetches) vs <strong>processes</strong> for <em>CPU-bound</em> (separate interpreters, separate GILs — <code>ProcessPoolExecutor</code>, ~N× on N cores; pays pickling + startup). NumPy/pandas ops release the GIL internally (vectorized code parallelizes differently — Part 3). Async (<code>asyncio</code>) = cooperative I/O concurrency (huge fan-out, one thread — beyond Part 1's scope; know the name).</p>
+<div class="code-block"><div class="code-head">executor map (same interface, different engines) <button class="copy-btn">Copy</button></div><pre><code>from concurrent import futures
+
+def fetch(url):
+    return f"data-of-{url}"          # stand-in for requests.get (I/O-bound → THREADS)
+
+urls = ["a", "b", "c", "d"]
+with futures.ThreadPoolExecutor(max_workers=4) as pool:
+    print(list(pool.map(fetch, urls)))     # 4 concurrent fetches (GIL released while waiting!)
+
+def heavy(n):
+    return sum(i*i for i in range(n))      # CPU-bound → PROCESSES (shown single-call here)
+print(heavy(100000))
+# with futures.ProcessPoolExecutor() as pool: list(pool.map(heavy, [...]))  # needs __main__ guard (Ch. 16!) + picklable fns</code></pre><div class="out">['data-of-a', 'data-of-b', 'data-of-c', 'data-of-d']
+333328333350000</div></div>
+
+<h3>24.6 Interview questions</h3>
+<details><summary>Q1: "My Python is slow" — your exact process?</summary><div class="inner">Measure-first: reproduce at realistic N → profile (cProfile cumulative) → top row is the suspect → classify (algorithm/structure? Python-loop? memory? recompute?) → fix at that level (set/dedupe·builtin/genexpr·stream·cache) → re-profile (bottlenecks relocate!) → stop at budget. Never micro-tune unmeasured; Amdahl governs (100× on 1% ≈ nothing). Cite a real crime→fix (membership list→set).</div></details>
+<details><summary>Q2: GIL: what, and how does it shape threads vs processes vs async vs NumPy?</summary><div class="inner">GIL serializes Python-bytecode execution per interpreter → threads don't parallelize CPU work (fine for I/O — waits release it; ThreadPool for fetches). CPU parallelism: processes (separate GILs; pickling cost) or C-extensions releasing the GIL (NumPy vectorized ops). Async: single-threaded cooperative I/O fan-out (not parallelism — concurrency). Choose by bound: I/O→threads/async, CPU→processes/vectorize.</div></details>
+<details><summary>Q3: List vs generator trade-offs — when must you materialize?</summary><div class="inner">Generators: O(1) memory, lazy, single-pass (no len/index/reuse/sort) — for pipelines consumed once (§19.5). Materialize (list) to: iterate repeatedly, index/slice, len(), sort, or debug-inspect. Size math: pointer+object per item vs fixed frame (~1000× at scale). Default streaming at boundaries; materialize deliberately with a comment (WHY reuse needs it).</div></details>
+
+<h3>24.7 Exercises</h3>
+<div class="ex L1"><span class="pill">Level 1 · Understand</span><ol><li><code>timeit</code> 5 idiom pairs (join vs +=, set vs list membership, genexpr vs loop, <code>in dict</code> vs <code>in list</code>, sort-once+bisect vs re-sort); report ×-factors.</li><li>Profile a 3-stage script with cProfile; identify the top row; verify "hunch vs profile" differ (write both down first!).</li><li><code>getsizeof</code> ladder: int/str/tuple/list/dict/set/generator of N items; explain per-item costs (§3.2 boxing).</li></ol></div>
+<div class="ex L2"><span class="pill">Level 2 · Apply</span><ol><li>Take an O(n²) script (nested membership/dedupe); fix via set/dict-index; show timings at 3 sizes proving the growth change (plot optional).</li><li>Convert a list-pipeline to a generator pipeline; prove O(1) memory (tracemalloc peak) at 10× rows; keep outputs identical (assert).</li><li>ThreadPool a 20-URL fetch (simulated latency); show wall-time ≈ slowest-single (not sum); then explain why CPU work wouldn't scale the same (GIL demo).</li></ol></div>
+<div class="ex L3"><span class="pill">Level 3 · Interview</span><ol><li>"1B-row log, 8GB RAM, 5-minute budget": architecture memo (streaming stages? chunking? which structure per stage? where processes? what telemetry?) with Big-O + memory math per stage.</li><li>Find a REAL slowdown in your code via profiling (not guessing); fix; present before/after profile excerpts + the one-line lesson (crime→fix pattern name).</li></ol></div>
+<h3>24.8 Mini-challenge 🏆</h3>
+<div class="ex L2"><span class="pill">Challenge</span><p><strong>Build <code>perf_lab.py</code>.</strong> Benchmark harness comparing 4 implementations (naive-loop, genexpr+builtin, cached, streamed) of "sum of squares of evens in N rows" at N = 10³/10⁵/10⁷: assert identical results, time + peak-memory each, print the ladder table, and write the 5-rule team guide this data justifies. Measurement culture, executable.</p></div>
+<div class="callout good"><strong class="t">🏁 Chapter summary → next</strong><strong>Remember:</strong> MEASURE FIRST (timeit/snippets, perf_counter/stages, cProfile/hotspots — hunches lose!) · Big-O ladder (set/dict-indexing kills O(n²); the crime blotter!) · push loops to C (builtins/genexprs; NumPy next in Part 3) · stream memory (O(1) generators; tracemalloc leaks; slots for millions) · cache pure-repeats; parallelize GIL-aware (threads=I/O, processes=CPU) · stop at budget (readable+fast-enough = done). <strong>Next:</strong> Chapter 25 — Python for Data Science at full depth: the bridge from language to profession.</div>
+</div></section>

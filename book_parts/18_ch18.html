@@ -1,0 +1,236 @@
+<!-- CHAPTER 18 -->
+<section class="chapter" id="ch18">
+<div class="ch-head"><div class="ch-num">18</div><div><div class="kicker">Design</div><h2>Object-Oriented Programming</h2></div><div class="ch-tools"><button class="icon-btn bm" title="Bookmark">☆</button><button class="icon-btn done" title="Mark complete">✓</button><span class="chev">▾</span></div></div>
+<div class="ch-body">
+<p><strong>What/why — from absolute zero.</strong> As programs grow, bare functions + dicts sprawl: <em>which dicts have which keys? which functions may touch them? what states are legal?</em> OOP answers by bundling <strong>data (attributes) + allowed operations (methods)</strong> into <strong>objects</strong> stamped from <strong>classes</strong> (blueprints). Four payoffs: <strong>encapsulation</strong> (valid states enforced in one place — invalid objects <em>unmakeable</em>), <strong>abstraction</strong> (callers use simple methods, never internals), <strong>inheritance</strong> (shared behavior written once), <strong>polymorphism</strong> (interchangeable parts behind one interface). You've used objects all book long (<code>"hi".upper()</code>, <code>[1].append(2)</code>, <code>df.head()</code>) — now you learn to <em>design</em> them. (Python is multi-paradigm: OOP + functions + data — use each where it fits, §18.8.)</p>
+
+<h3>18.1 Your first class: __init__, self, attributes, methods (line by line)</h3>
+<div class="code-block"><div class="code-head">Account: the complete minimal class <button class="copy-btn">Copy</button></div><pre><code>class Account:
+    """A tiny bank account. Balances never go negative (enforced!)."""
+
+    def __init__(self, owner, balance=0):  # CONSTRUCTOR: runs at Account(...)
+        if balance &lt; 0:                       # validate AT BIRTH (encapsulation!)
+            raise ValueError("balance can't be negative")
+        self.owner = owner                # ATTRIBUTE: data living ON the instance
+        self.balance = balance            # self.x = "this object's x" (per-instance!)
+
+    def deposit(self, amount):            # METHOD: function bound to instances
+        if amount &lt;= 0:
+            raise ValueError("deposit must be positive")
+        self.balance += amount            # mutate THIS object's state
+        return self.balance               # return new balance (composable!)
+
+    def __repr__(self):                   # developer view (REPL, logs, debugging)
+        return f"Account({self.owner!r}, {self.balance!r})"
+
+a = Account("Ali", 100)   # INSTANTIATE: allocate + __init__(a, "Ali", 100)
+b = Account("Zara")       # SEPARATE object, own attributes (balance=0 default)
+print(a)                  # Account('Ali', 100) — __repr__ used
+print(a.deposit(50))      # 150 — a.deposit(50) ≡ Account.deposit(a, 50) (!)
+print(a.balance, b.balance)  # 150 0 — independent state ✓
+print(a.owner)            # attribute READ (no call — data, not action)</code></pre><div class="out">Account('Ali', 100)
+150
+150 0
+Ali</div></div>
+<p><strong>Step-by-step (<code>Account("Ali", 100)</code>).</strong> ① Python allocates a blank instance object. ② Calls <code>__init__(new_obj, "Ali", 100)</code> — <code>self</code> <em>is</em> the new object (passed automatically, first position). ③ Body validates + stores <code>owner/balance</code> <em>on the instance</em> (in its attribute dict — inspect via <code>vars(a)</code>). ④ The now-initialized object is returned and bound to <code>a</code>. <code>b = Account("Zara")</code> repeats independently — two objects, two attribute dicts, zero sharing.</p>
+<p><strong><code>self`, precisely (the #1 beginner confusion).</strong> <code>self</code> is <em>not magic</em> — just the conventional name for the instance, passed automatically when you call <code>obj.method(args)</code> (rewritten as <code>Class.method(obj, args)</code>). Inside methods: <code>self.x</code> = this object's stored state (persists between calls); bare <code>x</code> = a local variable (dies at return). Forget <code>self</code> in the signature → <code>TypeError</code> (method called with 1 arg, defined with 0 — the instance still passed!). Forget <code>self.</code> on assignment → you made a local, state lost. Class-body assignments (<code>species = "human"</code>) are <strong>class attributes</strong> — shared across instances (§18.2's trap).</p>
+<div class="diagram"><strong>Figure 18.1 — Class (blueprint) vs instances (houses built from it)</strong><div class="mem"><div class="membox"><b>class Account</b>__init__ · deposit<br>__repr__<br><em>ONE blueprint (methods shared!)</em></div><div class="membox"><b>a = Account(...)</b>owner: 'Ali'<br>balance: 150<br><em>own data</em></div><div class="membox"><b>b = Account(...)</b>owner: 'Zara'<br>balance: 0<br><em>own data</em></div></div><div style="font-size:.85rem">Methods live on the class (shared code); attributes live on instances (private data). <code>a.deposit</code> = method + <code>a</code> pre-bound (a <em>bound method</em>).</div></div>
+
+<h3>18.2 Class attributes vs instance attributes (+ the mutable-class-attr trap)</h3>
+<div class="code-block"><div class="code-head">shared vs per-instance state <button class="copy-btn">Copy</button></div><pre><code>class Dog:
+    species = "Canis familiaris"   # CLASS attribute: ONE copy, shared by ALL dogs
+    def __init__(self, name):
+        self.name = name           # INSTANCE attribute: per-dog
+        self.tricks = []           # ✅ mutable state in __init__ (per-instance!)
+
+d1, d2 = Dog("Rex"), Dog("Tom")
+print(d1.species, d2.species)      # shared read ✓
+d1.tricks.append("roll")           # touches ONLY d1's list
+print(d1.tricks, d2.tricks)        # ['roll'] [] ✓
+Dog.species = "C. familiaris"      # change on CLASS → visible via ALL instances
+print(d2.species)
+d1.species = "wolf?!"              # ⚠️ assignment on INSTANCE → SHADOWS (class untouched!)
+print(d1.species, d2.species, Dog.species)  # wolf?! C. familiaris C. familiaris
+
+class BrokenTeam:
+    members = []                   # ❌ MUTABLE CLASS ATTRIBUTE — shared trap!
+    def __init__(self, name):
+        self.name = name
+    def join(self, who):
+        self.members.append(who)   # mutates THE CLASS'S list (no instance list exists!)
+t1, t2 = BrokenTeam("a"), BrokenTeam("b")
+t1.join("x")
+print(t2.members)  # ['x'] — LEAKED across teams! (Fix: self.members = [] in __init__)</code></pre><div class="out">Canis familiaris Canis familiaris
+['roll'] []
+C. familiaris
+wolf?! C. familiaris C. familiaris
+['x']</div></div>
+<p><strong>Lookup rule (read vs write asymmetry).</strong> <em>Read</em> <code>obj.attr</code>: instance dict → class → parent classes (MRO — §18.5) → AttributeError. <em>Write</em> <code>obj.attr = v</code>: <strong>always the instance dict</strong> (shadowing any class attr of that name!). <em>Mutate</em> <code>obj.attr.append(x)</code>: reads (finds class's list!) then mutates <em>in place</em> — no rebinding, so the shared object changes. Hence: class attributes for <em>constants/defaults shared intentionally</em> (immutable!); ALL mutable/per-object state in <code>__init__</code>.</p>
+
+<h3>18.3 Encapsulation: privacy conventions + validating properties</h3>
+<p><strong>What.</strong> <em>Encapsulation</em> = the object guards its own validity: construction validates (<code>__init__</code> raises on garbage), mutation funnels through methods/properties that re-validate. Python's privacy is <em>by convention, not enforcement</em>: <code>_x</code> = "internal, don't touch from outside" (still accessible — we're adults); <code>__x</code> = name-mangled to <code>_Class__x</code> (anti-collision for inheritance, not security — §18.5).</p>
+<p><strong><code>@property</code>: validation with attribute syntax.</strong> Start with plain attributes; when validation/computation is needed, upgrade to a property <em>without changing any caller</em> (<code>obj.x</code> reads/writes identically) — the killer feature vs Java-style getters/setters.</p>
+<div class="code-block"><div class="code-head">Temperature: validated + computed properties <button class="copy-btn">Copy</button></div><pre><code>class Temperature:
+    def __init__(self, celsius):
+        self.celsius = celsius          # routes through the SETTER (validates at birth!)
+
+    @property
+    def celsius(self):                  # READ: t.celsius (no parens — looks like data!)
+        return self._celsius
+
+    @celsius.setter
+    def celsius(self, value):           # WRITE: t.celsius = v (validates EVERY time!)
+        if value &lt; -273.15:
+            raise ValueError("below absolute zero")
+        self._celsius = value           # real storage: _-conventional "private"
+
+    @property
+    def fahrenheit(self):               # COMPUTED, read-only (no setter → assign raises!)
+        return self._celsius * 9/5 + 32
+
+t = Temperature(25)
+print(t.celsius, t.fahrenheit)  # 25 77.0
+try:
+    t.celsius = -300            # invalid states UNMAKEABLE — the setter refuses!
+except ValueError as e:
+    print("rejected:", e)       # rejected: below absolute zero
+# t.fahrenheit = 32             # 💥 AttributeError: can't set attribute (read-only!)</code></pre><div class="out">25 77.0
+rejected: below absolute zero</div></div>
+<p><strong>Step-by-step (<code>t.celsius = -300</code>).</strong> Assignment to a <em>data descriptor</em> (property with setter) invokes the setter function with <code>(t, -300)</code> instead of touching the instance dict → validation raises → <code>_celsius</code> untouched (still 25). Reads invoke the getter. Callers keep simple <code>obj.x</code> syntax forever — <em>this</em> is why Python needs no getters: start simple, armor later, break nothing.</p>
+
+<h3>18.4 staticmethod, classmethod, and alternate constructors</h3>
+<div class="code-block"><div class="code-head">three method kinds, each justified <button class="copy-btn">Copy</button></div><pre><code>class Temperature2:
+    def __init__(self, celsius):
+        self.celsius = celsius
+
+    def doubled(self):                  # INSTANCE method (default): needs SELF state
+        return Temperature2(self.celsius * 2)
+
+    @staticmethod
+    def c_to_f(c):                      # STATIC: no self/cls — pure utility, namespaced here
+        return c * 9/5 + 32
+
+    @classmethod
+    def from_fahrenheit(cls, f):        # CLASS method: gets the CLASS — alt CONSTRUCTOR
+        return cls((f - 32) * 5/9)      # cls(...) respects SUBCLASSES (hardcoded name wouldn't!)
+
+    @classmethod
+    def from_kelvin(cls, k):
+        return cls(k - 273.15)
+
+t = Temperature2.from_fahrenheit(98.6)  # reads as English: "temperature FROM fahrenheit"
+print(t.celsius, Temperature2.c_to_f(0))  # 37.0 32.0
+class Sub(Temperature2): pass
+print(type(Sub.from_fahrenheit(32)))     # Sub — cls preserved inheritance ✓ (hardcode would give Temperature2!)</code></pre><div class="out">37.0 32.0
+&lt;class '__main__.Sub'&gt;</div></div>
+<p><strong>When each.</strong> Instance methods: behavior needing object state (default — 90%). <code>@staticmethod</code>: stateless utility that <em>belongs to the concept's namespace</em> (<code>c_to_f</code> lives with temperatures). <code>@classmethod</code>: needs the class itself — alternate constructors (<code>from_csv, from_json, from_fahrenheit</code>), inherited-friendly factories, class-level polymorphism. Interview one-liner: "instance = self, static = neither, class = cls".</p>
+
+<h3>18.5 Inheritance, polymorphism, super(), and MRO</h3>
+<p><strong>What.</strong> <em>Inheritance</em>: <code>class CsvReader(Reader)</code> — CsvReader <em>is-a</em> Reader, gaining its interface + implementation, overriding what differs. <em>Polymorphism</em>: code written against the base (<code>def load_all(reader: Reader, …)</code>) works with <em>any</em> subclass — interchangeable parts. <code>super()</code> calls the <em>next</em> implementation up the chain (extend, don't replace). <strong>MRO</strong> (Method Resolution Order — <code>Class.__mro__</code>, C3 linearization) defines the lookup chain for multiple inheritance.</p>
+<div class="code-block"><div class="code-head">Reader hierarchy + polymorphism + super() <button class="copy-btn">Copy</button></div><pre><code>class Reader:                                   # BASE: defines the INTERFACE
+    def read(self, path):
+        raise NotImplementedError("subclasses implement read()")
+
+class CsvReader(Reader):                        # IS-A Reader (inheritance)
+    def read(self, path):
+        return f"rows from {path}"              # OVERRIDE (specialize)
+
+class JsonReader(Reader):
+    def read(self, path):
+        return f"object from {path}"
+
+def load_all(reader: Reader, paths):            # POLYMORPHISM: ANY Reader works here
+    return [reader.read(p) for p in paths]
+
+print(load_all(CsvReader(), ["a.csv"]))         # ['rows from a.csv']
+print(isinstance(CsvReader(), Reader))          # True — substitutable ✓
+
+class LoggedCsvReader(CsvReader):               # extend WITHOUT rewriting:
+    def read(self, path):
+        print(f"[log] reading {path}")
+        return super().read(path)               # super() = CsvReader.read here
+print(load_all(LoggedCsvReader(), ["b.csv"]))
+print(LoggedCsvReader.__mro__)                  # (Logged, Csv, Reader, object) — lookup chain!</code></pre><div class="out">['rows from a.csv']
+True
+[log] reading b.csv
+['rows from b.csv']
+(&lt;class '__main__.LoggedCsvReader'&gt;, &lt;class '__main__.CsvReader'&gt;, &lt;class '__main__.Reader'&gt;, &lt;class 'object'&gt;)</div></div>
+<p><strong>Design rules (the judgment part).</strong> ① Inherit for <em>is-a</em> (CsvReader <em>is a</em> Reader); <strong>compose</strong> (hold a helper: <code>self.reader = CsvReader()</code>) for <em>has-a</em>/<em>uses-a</em> — composition beats tangled hierarchies (favor it by default!). ② Keep hierarchies <em>shallow</em> (2–3 levels; deep trees = fragile base-class problem). ③ <code>super().__init__(…)</code> in subclass constructors (extend parent init, don't silently skip it). ④ Prefer <strong>duck typing</strong> ("if it has <code>.read(path)</code>, it's a reader") over <code>isinstance</code> chains — Python's polymorphism is behavioral, not nominal. (Abstract bases (<code>abc.ABC</code> + <code>@abstractmethod</code>) <em>enforce</em> the interface at instantiation — use when the contract must be unbreakable.)</p>
+<div class="callout warn"><strong class="t">⚠️ Inheritance traps</strong>Forgetting <code>super().__init__</code> (parent state never built — AttributeErrors later) · overriding without matching signature (Liskov violation — substitutability breaks) · multiple inheritance diamonds (MRO usually saves you, but <em>need</em> for MI often signals composition would fit) · <code>__x</code> name-mangling across inheritance (<code>_Class__x</code> — subclass <code>__x</code> is a <em>different</em> attr, by design anti-collision).</div>
+
+<h3>18.6 Dunder methods: teaching objects Python's verbs</h3>
+<p><strong>What.</strong> <em>Dunder</em> (double-underscore) methods hook your classes into Python's syntax and builtins: define <code>__len__</code> and <code>len(obj)</code> works; <code>__getitem__</code> → <code>obj[k]</code>; <code>__iter__</code> → <code>for x in obj</code>; <code>__eq__</code> → <code>==</code>; <code>__add__</code> → <code>+</code>. This is how <code>list/dict/str</code> themselves work — you're extending the language, not fighting it.</p>
+<div class="code-block"><div class="code-head">Playlist: len, getitem, iter, contains, eq, add <button class="copy-btn">Copy</button></div><pre><code>class Playlist:
+    def __init__(self, name, songs=()):
+        self.name, self.songs = name, list(songs)
+    def __repr__(self):                       # UNAMBIGUOUS dev view (REPL/logs) — ALWAYS define!
+        return f"Playlist({self.name!r}, {self.songs!r})"
+    def __str__(self):                        # pretty human view (print/str) — optional
+        return f"{self.name} ({len(self)} songs)"
+    def __len__(self): return len(self.songs) # len(p) ✓
+    def __getitem__(self, i): return self.songs[i]  # p[0], p[1:] ✓ (slices free!)
+    def __iter__(self): return iter(self.songs)     # for s in p ✓
+    def __contains__(self, s): return s in self.songs  # "x" in p ✓
+    def __eq__(self, o):                      # p1 == p2 (value equality!)
+        return isinstance(o, Playlist) and (self.name, self.songs) == (o.name, o.songs)
+    def __add__(self, other):                 # p1 + p2 → merged NEW playlist
+        return Playlist(f"{self.name}+{other.name}", self.songs + other.songs)
+
+p = Playlist("gym", ["a", "b"])
+print(p)                 # __str__: gym (2 songs)
+print(repr(p))           # __repr__: Playlist('gym', ['a', 'b'])
+print(len(p), p[0], "a" in p, [s.upper() for s in p])
+print(p + Playlist("run", ["c"]))  # merged (3 songs)</code></pre><div class="out">gym (2 songs)
+Playlist('gym', ['a', 'b'])
+2 a True ['A', 'B']
+gym+run (3 songs)</div></div>
+<p><strong><code>__repr__` vs <code>__str__</code> (exact).</strong> <code>repr()</code>: <em>unambiguous, developer-facing</em> (REPL echo, logs, containers' contents, tracebacks) — goal: "paste it back to rebuild" (<code>Playlist('gym', ['a','b'])</code>). <code>str()</code>: <em>pretty, user-facing</em> (<code>print</code>, f-strings) — goal: readable. Fallback: <code>str</code> without <code>__str__</code> uses <code>__repr__</code>. Rule: <strong>always define <code>__repr__</code></strong> (debugging depends on it); add <code>__str__</code> when humans read it. (<code>__eq__</code> without <code>__hash__</code> makes instances <em>unhashable</em> — define both or neither (§8.4's contract); dataclasses automate this — §18.7.)</p>
+
+<h3>18.7 dataclasses: records without boilerplate (+ when NOT to use them)</h3>
+<div class="code-block"><div class="code-head">dataclass: __init__/__repr__/__eq__ generated <button class="copy-btn">Copy</button></div><pre><code>from dataclasses import dataclass, field
+
+@dataclass                 # generates __init__, __repr__, __eq__ from annotations!
+class Point:
+    x: float
+    y: float
+    label: str = "origin"   # default allowed (immutable defaults fine)
+
+p, q = Point(1, 2), Point(1, 2)
+print(p)                    # Point(x=1, y=2, label='origin') — free repr!
+print(p == q)               # True — VALUE equality, free!
+
+@dataclass
+class Team:
+    name: str
+    members: list = field(default_factory=list)  # ✅ mutable default done RIGHT (fresh per instance)
+t1, t2 = Team("a"), Team("b")
+t1.members.append("x")
+print(t1.members, t2.members)  # ['x'] [] — independent ✓ (vs §18.2's trap!)
+
+@dataclass(frozen=True)    # IMMUTABLE record (hashable! dict keys!)
+class FrozenPoint:
+    x: float
+    y: float
+print(hash(FrozenPoint(1, 2)) is not None)  # True
+# fp = FrozenPoint(1,2); fp.x = 5 → FrozenInstanceError (frozen = unchangeable)</code></pre><div class="out">Point(x=1, y=2, label='origin')
+True
+['x'] []
+True</div></div>
+<p><strong>When dataclasses (vs plain class vs NamedTuple vs dict).</strong> Dataclass: mutable-or-frozen <em>records with behavior + validation</em> (<code>__post_init__</code> validates!). Plain class: complex lifecycles, rich polymorphism, heavy encapsulation. NamedTuple: tiny immutable records, tuple-compatible. Dict: dynamic/schemaless JSON-ish bags. Rule of thumb: <em>fixed schema known at write time → dataclass</em> (catches typos via attributes, documents shape via annotations, equality/repr free).</p>
+<div class="callout good"><strong class="t">✅ Data-Science connection (OOP pays off here)</strong>Scikit-learn's API <em>is</em> OOP: estimators are objects with <code>.fit(X, y)</code>/<code>.predict(X)</code> (polymorphism — swap models without rewriting pipelines; <code>Pipeline</code> composes them). Datasets → dataclasses; pipelines → classes with <code>.run()</code>; custom transformers → subclasses of base estimators (inheritance done right). Learn OOP now; every ML library reads as prose later.</div>
+
+<h3>18.8 Interview questions</h3>
+<details><summary>Q1: Class vs instance vs instance-attribute vs class-attribute? The mutable trap?</summary><div class="inner">Class = blueprint (methods live here, shared). Instance = object built from it. Instance attrs (<code>self.x</code>, in <code>__init__</code>) = per-object state. Class attrs (body-level) = shared across instances. Trap: mutable class attr (<code>members = []</code>) is ONE list mutated via all instances — reads find it (lookup chain), <code>.append</code> mutates in place. Fix: initialize mutables in <code>__init__</code> (or <code>field(default_factory=…)</code>).</div></details>
+<details><summary>Q2: What is self, exactly? What breaks without it?</summary><div class="inner"><code>self</code> = the instance, passed automatically as the first arg on <code>obj.method(…)</code> calls (<code>Class.method(obj, …)</code>). Without it in the signature: TypeError (instance still passed, nowhere to land). <code>self.x</code> = persistent per-object state; bare <code>x</code> = dying local. It's convention (any name works) but universal — renaming it is a readability crime.</div></details>
+<details><summary>Q3: @staticmethod vs @classmethod vs instance method — with the cls-inheritance proof?</summary><div class="inner">Instance: needs <code>self</code> state (default). static: neither — namespaced utility. class: receives <code>cls</code> — alternate constructors + inherited factories. Proof: <code>Sub.from_x(…)</code> returns <code>Sub</code> via <code>cls(…)</code>; a hardcoded <code>ClassName(…)</code> would wrongly return the parent (§18.4 demo).</div></details>
+<details><summary>Q4: Inheritance vs composition — when each? What is polymorphism in Python (duck typing)?</summary><div class="inner">Inherit <em>is-a</em> (CsvReader is a Reader), shallow (2–3 levels), <code>super().__init__</code> to extend. Compose <em>has-a/uses-a</em> (pipeline <em>has a</em> reader — injected, swappable). Default to composition. Polymorphism: uniform interface, interchangeable implementations — in Python, behavioral (duck typing: "has <code>.read(path)</code>" suffices) rather than nominal; <code>abc</code> enforces contracts when required.</div></details>
+<details><summary>Q5: __str__ vs __repr__? __eq__/__hash__ contract?</summary><div class="inner"><code>__repr__</code>: unambiguous dev view (REPL/logs/containers) — always define. <code>__str__</code>: pretty human view (print) — optional (falls back to repr). Defining <code>__eq__</code> without <code>__hash__</code> sets <code>__hash__ = None</code> (unhashable!) — equal objects must hash equal (§8.4); define both, neither, or freeze (dataclass <code>frozen=True</code>/eq babysits this).</div></details>
+
+<h3>18.9 Exercises</h3>
+<div class="ex L1"><span class="pill">Level 1 · Understand</span><ol><li><code>Counter</code> class (<code>inc/dec/reset/value</code> + <code>__repr__</code>); prove <code>obj.method(x) ≡ Class.method(obj, x)</code> by calling both forms.</li><li>Add a validated <code>@property</code> (reject bad values with messages); show birth-validation + set-validation + read-only computed property.</li><li>Reproduce the mutable-class-attr trap with <code>id()</code> proof; fix two ways (<code>__init__</code>, dataclass <code>default_factory</code>).</li></ol></div>
+<div class="ex L2"><span class="pill">Level 2 · Apply</span><ol><li><code>Dataset</code> class: rows (list of dicts) + <code>filter(pred)</code> (chainable, returns Dataset!) + <code>column(name)</code> + <code>__len__/__iter__/__getitem__</code> + <code>head(n)</code>. Chain two filters.</li><li>Convert a 3-field record class to <code>@dataclass</code> (+ <code>__post_init__</code> validation + one computed property + <code>frozen=True</code> variant as dict key).</li><li><code>Playlist</code>-style dunders on your <code>Dataset</code>: <code>==</code>, <code>+</code> (concat), <code>in</code> (row membership). Argue each dunder's semantics.</li></ol></div>
+<div class="ex L3"><span class="pill">Level 3 · Interview</span><ol><li>Design <code>Reader</code> ABC (<code>abc</code>) + CSV/JSON subclasses + <code>DataPipeline(reader, steps)</code> via composition (injected reader, swappable steps). Defend every inheritance-vs-composition choice in comments a reviewer would respect.</li><li>Implement <code>__eq__ + __hash__</code> by hand for a small value class; prove dict/set correctness; then show the dataclass one-liner equivalent. When would you still hand-roll? (Hint: normalization, casefold, tolerance.)</li></ol></div>
+<h3>18.10 Mini-challenge 🏆</h3>
+<div class="ex L2"><span class="pill">Challenge</span><p><strong>Build <code>shapes.py</code>.</strong> <code>Shape</code> ABC (<code>area/perimeter</code> abstract) + <code>Circle/Rectangle</code> (validated properties: positive dimensions!) + <code>__repr__/__eq__</code> + <code>from_dict</code> classmethod constructors + a <code>total_area(shapes)</code> polymorphic consumer + frozen-dataclass <code>Point</code> used by <code>Circle.center</code>. Then break Liskov deliberately (a <code>Square(Rectangle)</code> with independent width/height setters — show the contradiction!) and document why composition or separate hierarchies win. The whole chapter, running.</p></div>
+<div class="callout good"><strong class="t">🏁 Chapter summary → next</strong><strong>Remember:</strong> class = shared blueprint, instances = private data (<code>self</code> passed automatically) · mutables in <code>__init__</code> (never class-level!) · encapsulate: validate at birth + properties (upgrade without breaking callers) · instance/static/class per need (classmethod-constructs!) · inherit is-a (shallow, <code>super()</code>), compose has-a (default!), duck-type behavior · dunders teach Python's verbs (<code>__repr__</code> always!) · dataclasses for records (<code>default_factory</code>, <code>frozen</code>). <strong>Next:</strong> Chapter 19 — iterators &amp; generators at full depth: lazy streams that sip memory.</div>
+</div></section>

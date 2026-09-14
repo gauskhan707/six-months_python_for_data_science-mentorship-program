@@ -1,0 +1,211 @@
+<!-- CHAPTER 15 -->
+<section class="chapter" id="ch15">
+<div class="ch-head"><div class="ch-num">15</div><div><div class="kicker">Robustness · data workflows</div><h2>Files and Data</h2></div><div class="ch-tools"><button class="icon-btn bm" title="Bookmark">☆</button><button class="icon-btn done" title="Mark complete">✓</button><span class="chev">▾</span></div></div>
+<div class="ch-body">
+<p><strong>What/why.</strong> Programs that can't touch files can't touch reality. Data lives in <strong>text files</strong> (logs, notes), <strong>CSV</strong> (tables — the lingua franca of data exchange), <strong>JSON</strong> (nested records, APIs, configs), and behind <strong>paths</strong> that differ per OS. Python's file story stands on four pillars: <code>open()</code> + <code>with</code> (guaranteed cleanup), the <code>csv</code>/<code>json</code> modules (never hand-parse structured formats), <code>pathlib</code> (paths as objects, not strings), and <strong>streaming</strong> (process gigabytes in constant memory). Master this chapter and Chapters 25 + all five projects are pure composition.</p>
+
+<h3>15.1 open(): modes, encoding, newlines — the complete contract</h3>
+<p><strong>What.</strong> <code>open(path, mode="r", encoding=None, newline=None)</code> returns a <em>file object</em> (a buffered stream): text modes yield <code>str</code> (decoded), binary modes yield <code>bytes</code> (raw). The mode string combines <em>direction</em> (<code>r/w/a/x</code>) + optional <code>+</code> (update), <code>b</code> (binary), <code>t</code> (text, default).</p>
+<table><tr><th>Mode</th><th>Meaning</th><th>Missing file?</th><th>Existing content?</th></tr>
+<tr><td><code>"r"</code> (default)</td><td>Read text</td><td><code>FileNotFoundError</code></td><td>Untouched</td></tr>
+<tr><td><code>"w"</code></td><td>Write (create/truncate)</td><td>Created</td><td><strong>ERASED immediately on open</strong></td></tr>
+<tr><td><code>"a"</code></td><td>Append (writes go to end)</td><td>Created</td><td>Kept; cursor at end</td></tr>
+<tr><td><code>"x"</code></td><td>Exclusive create</td><td>Created</td><td><code>FileExistsError</code> (safe "don't clobber me")</td></tr>
+<tr><td><code>"r+"/"w+"/"a+"</code></td><td>Read+write combos</td><td>Varies</td><td>Seek/tell juggling — rare, fiddly</td></tr>
+<tr><td><code>"rb"/"wb"/…</code></td><td>Binary (no decode, no newline translation)</td><td>As above</td><td>As above — bytes in/out</td></tr></table>
+<p><strong>Encoding (non-negotiable).</strong> Text mode decodes bytes→str on read and encodes str→bytes on write using <code>encoding=…</code> — which <strong>defaults to platform-dependent</strong> (<code>locale.getpreferredencoding()</code>): UTF-8 on most macOS/Linux, <strong>cp1252 on many Windows setups</strong>. Omitting it means "works on my machine, mojibake on yours". <strong>Always pass <code>encoding="utf-8"` explicitly</strong> (or the file's true encoding — §6.8's debugging guide). New day, new rule: <code>open()</code> without <code>encoding=</code> is a bug report waiting to happen (linters can flag it).</p>
+<p><strong>Newlines.</strong> Text mode with default <code>newline=None</code> enables <em>universal newlines</em>: <code>\r\n</code> (Windows) and <code>\r</code> (old Mac) are translated to <code>\n</code> on read, and <code>\n</code> is translated back to the OS convention on write. The <code>csv</code> module needs this <em>disabled</em> (<code>newline=""</code> — §15.3) because it handles embedded newlines in quoted fields itself.</p>
+<div class="code-block"><div class="code-head">the with-guarantee + read shapes <button class="copy-btn">Copy</button></div><pre><code># ✅ ALWAYS: with (close+flush guaranteed, even on exceptions/returns) + encoding
+with open("notes.txt", "w", encoding="utf-8") as f:
+    f.write("hello\n")        # returns chars written (6)
+    f.write("world\n")
+    # f is FLUSHED + CLOSED here — even if an exception fired mid-block!
+
+with open("notes.txt", encoding="utf-8") as f:
+    text = f.read()           # WHOLE file → one str (fine for KBs, death for GBs!)
+print(repr(text))             # 'hello\nworld\n' — !r shows the invisible \n
+
+with open("notes.txt", encoding="utf-8") as f:
+    lines = f.readlines()     # ALL lines → list (keeps \n! same memory warning)
+print(lines)
+print("closed?", f.closed)    # True — `with` closed it (outside the block, f persists but shut)</code></pre><div class="out">'hello\nworld\n'
+['hello\n', 'world\n']
+closed? True</div></div>
+<p><strong>Step-by-step (<code>with</code>).</strong> <code>open(…)</code> creates the file object; <code>__enter__</code> returns it as <code>f</code>; the block runs; then <code>__exit__</code> runs <em>unconditionally</em> — flushing buffers to the OS and releasing the handle — whether the block finished, returned, or raised (Chapter 21's context-manager protocol; files are its flagship use). Without <code>with</code>, an exception mid-write leaks the handle and <em>loses buffered data</em> — truncated/corrupt files with no error at the loss site.</p>
+<div class="callout bad"><strong class="t">🚫 The "w"-clobber catastrophe</strong><code>open(path, "w")</code> <strong>truncates existing content the instant it opens</strong> — before you write a byte. A script that opens its <em>input</em> with <code>"w"</code> by typo, or crashes between open and write, destroys data irrecoverably. Defenses: (1) <code>"x"</code> for outputs that must not exist; (2) <strong>atomic write</strong> (temp file + <code>os.replace</code> — §15.6) for anything precious; (3) backups/version control for irreplaceable inputs; (4) never use the same path for input and output simultaneously.</div>
+
+<h3>15.2 Streaming: files are lazy iterables (process GBs in MBs)</h3>
+<p><strong>What.</strong> A file object <em>is an iterator</em> (Chapter 19's protocol): <code>for line in f:</code> reads and yields <strong>one line at a time</strong>, buffering ahead invisibly — memory stays flat (~KBs) no matter the file size. This is <em>the</em> big-file technique, composing with generator pipelines (§15.6, Ch. 19).</p>
+<div class="code-block"><div class="code-head">streaming patterns: count, filter, head, reservoir <button class="copy-btn">Copy</button></div><pre><code># Setup: a 3-line demo (imagine 30M lines — code is IDENTICAL)
+with open("demo.log", "w", encoding="utf-8") as f:
+    f.write("INFO start\nERROR boom\nINFO end\n")
+
+with open("demo.log", encoding="utf-8") as f:   # ✅ O(1) memory at ANY size
+    for line in f:                              # one line at a time (keeps \n!)
+        print("line:", line.strip())            # .strip() removes \n for display
+
+def head(path, n=5):                            # first n lines, never loads all
+    out = []
+    with open(path, encoding="utf-8") as f:
+        for i, line in enumerate(f):
+            if i &gt;= n:
+                break
+            out.append(line.rstrip("\n"))
+    return out
+print(head("demo.log", 2))
+
+def count_matching(path, word):                 # grep-like counter, streaming
+    n = 0
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            if word in line:
+                n += 1
+    return n
+print("ERROR lines:", count_matching("demo.log", "ERROR"))</code></pre><div class="out">line: INFO start
+line: ERROR boom
+line: INFO end
+['INFO start', 'ERROR boom']
+ERROR lines: 1</div></div>
+<p><strong>Memory law.</strong> <code>read()</code>/<code>readlines()</code>/<code>list(f)</code> materialize everything (O(file) RAM — fine under ~100MB, fatal at 10GB). Line-iteration and <code>readline()</code>/<code>read(CHUNK)</code> stream (O(1)). Rule: <em>default to streaming</em>; materialize only when random access genuinely needs it (and then check the size first: <code>Path.stat().st_size</code>). Chapter 19's generators turn these loops into composable <code>read → clean → filter → aggregate</code> pipelines.</p>
+
+<h3>15.3 CSV: tables done right (never hand-parse)</h3>
+<p><strong>What.</strong> CSV (<em>comma-separated values</em>) is the universal table exchange format — with deceptively tricky rules (RFC 4180): fields containing commas/newlines/quotes get <em>quoted</em> (<code>"pen, fancy"</code>), quotes double (<code>"say ""hi"""</code>), line endings vary. The <code>csv</code> module implements all of it. <strong>Hand-parsing with <code>split(",")</code> corrupts real-world CSV</strong> — the demo below proves it in 3 lines.</p>
+<div class="code-block"><div class="code-head">split vs csv: the corruption demo <button class="copy-btn">Copy</button></div><pre><code>line = 'pen, fancy,3,2.5'          # innocent line — split works...
+print(line.split(","))              # ['pen', ' fancy', '3', '2.5'] ✓ (but note spaces!)
+real = '"pen, fancy",3,2.5'         # REAL line — comma INSIDE quotes
+print(real.split(","))              # ['"pen', ' fancy"', '3', '2.5'] — CORRUPT! (4 fields, quotes kept)
+import csv
+print(next(csv.reader([real])))     # ['pen, fancy', '3', '2.5'] — CORRECT (3 fields, quotes handled)</code></pre><div class="out">['pen', ' fancy', '3', '2.5']
+['"pen', ' fancy"', '3', '2.5']
+['pen, fancy', '3', '2.5']</div></div>
+<div class="code-block"><div class="code-head">DictReader/DictWriter: the professional CSV shape <button class="copy-btn">Copy</button></div><pre><code>import csv
+# WRITE: newline="" is REQUIRED (docs-mandated — else \r\r\n blank rows on Windows!)
+with open("sales.csv", "w", newline="", encoding="utf-8") as f:
+    w = csv.DictWriter(f, fieldnames=["item", "qty", "price"])
+    w.writeheader()                                            # item,qty,price
+    w.writerow({"item": "pen, fancy", "qty": 3, "price": 2.5})  # quoted AUTOMATICALLY
+    w.writerow({"item": "book", "qty": 1, "price": 12.0})
+
+with open("sales.csv", newline="", encoding="utf-8") as f:
+    reader = csv.DictReader(f)      # first row → fieldnames; each row → dict of STRINGS
+    print("fields:", reader.fieldnames)
+    for row in reader:              # STREAMING (row by row — big files safe!)
+        total = float(row["price"]) * int(row["qty"])  # CSV values ALWAYS str — CONVERT!
+        print(row, "→", total)</code></pre><div class="out">fields: ['item', 'qty', 'price']
+{'item': 'pen, fancy', 'qty': '3', 'price': '2.5'} → 7.5
+{'item': 'book', 'qty': '1', 'price': '12.0'} → 12.0</div></div>
+<p><strong>Step-by-step (read path).</strong> <code>DictReader</code> consumes the header row as <code>fieldnames</code>; each subsequent physical record (possibly spanning multiple <em>lines</em> if quoted newlines!) becomes an ordered dict mapping fieldname → raw string. <strong>All values are strings</strong> — <code>int/float</code> conversion is <em>your</em> job, with error handling (Chapter 14's collect-and-continue — never let one bad cell kill a million-row load). Malformed rows (too many/few fields): <code>restkey/restval</code> params or strict validation — choose loudly.</p>
+<p><strong>Dialects + TSV + gotchas.</strong> <code>csv.reader(f, delimiter="\t")</code> reads TSV; <code>delimiter=";"</code> reads continental CSV; <code>quoting=csv.QUOTE_MINIMAL</code> (default) quotes only when needed. Sniffer (<code>csv.Sniffer().sniff(sample)</code>) guesses dialects — convenient, occasionally wrong (verify <code>fieldnames</code>!). Excel writes BOM (<code>\ufeff</code>) — read with <code>encoding="utf-8-sig"</code> (strips it) or your first column name gains an invisible character (the classic "KeyError on a key that's RIGHT THERE").</p>
+
+<h3>15.4 JSON: nested records, APIs, configs</h3>
+<p><strong>What.</strong> JSON (JavaScript Object Notation) encodes nested data: objects ↔ dicts, arrays ↔ lists, strings/numbers/booleans/null ↔ str/int/float/bool/None. The <code>json</code> module converts both directions: <code>dumps</code> (dict→str), <code>loads</code> (str→dict), <code>dump/load</code> (file variants). Boundaries: <code>dump</code> on write, <code>load</code> on read — with <code>indent=2</code> for humans, compact for machines.</p>
+<div class="code-block"><div class="code-head">json round-trip + pretty + strictness <button class="copy-btn">Copy</button></div><pre><code>import json
+user = {"name": "Ali", "tags": ["vip", "pk"], "vip": True, "note": None, "score": 93.5}
+text = json.dumps(user, indent=2)    # dict → JSON string (True→true, None→null)
+print(text)
+back = json.loads(text)              # JSON string → dict
+print(back == user)                  # True — lossless round-trip (for JSON-native types!)
+with open("user.json", "w", encoding="utf-8") as f:
+    json.dump(user, f, indent=2, ensure_ascii=False)  # keep é😀 readable (not \uXXXX)
+# What json CAN'T do: sets, tuples-as-tuples, dates, custom objects:
+# json.dumps({"s": {1,2}}) → TypeError! Convert first: {"s": sorted(...)} / isoformat dates.
+# Parse failures: json.loads("{bad}") → json.JSONDecodeError (a ValueError — catch it!)</code></pre><div class="out">{
+  "name": "Ali",
+  "tags": [
+    "vip",
+    "pk"
+  ],
+  "vip": true,
+  "note": null,
+  "score": 93.5
+}
+True</div></div>
+<p><strong>JSONL (JSON Lines) — the big-data sibling.</strong> One JSON object per line (<code>{"a":1}\n{"a":2}\n</code>): streamable (parse line-by-line — full-file <code>json.load</code> can't stream!), appendable, grep-able. Logs, event streams, and datasets use it. Pattern: <code>for line in f: obj = json.loads(line)</code> + per-line try/except (one corrupt line shouldn't kill the stream — §14.4).</p>
+
+<h3>15.5 pathlib: paths as objects (never string-surgery again)</h3>
+<p><strong>What.</strong> <code>pathlib.Path</code> represents filesystem paths as <em>objects</em> with operators and methods: <code>/</code> joins (cross-platform!), <code>.exists()/.mkdir()/.stat()/.suffix/.stem/.parent</code> inspect, <code>.read_text()/.write_text()</code> shortcut small files, <code>.glob()</code> finds patterns. It replaces <code>os.path.join</code> string-juggling and hardcoded separators.</p>
+<div class="code-block"><div class="code-head">pathlib: the working set <button class="copy-btn">Copy</button></div><pre><code>from pathlib import Path
+p = Path("data") / "2026" / "sales.csv"   # / joins — correct sep on EVERY OS
+print(p)                                  # data/2026/sales.csv (shown with / even on Win)
+print("suffix:", p.suffix, "| stem:", p.stem, "| name:", p.name, "| parent:", p.parent)
+print("exists:", p.exists())
+print("parts:", p.parts)                  # ('data', '2026', 'sales.csv') — portable anatomy
+print("as_json:", p.with_suffix(".json")) # data/2026/sales.json — swap extensions safely
+# Small-file shortcuts (encoding STILL explicit!):
+# Path("hi.txt").write_text("hello\n", encoding="utf-8")
+# print(Path("hi.txt").read_text(encoding="utf-8"))
+# Make trees + find files:
+# Path("data/2026").mkdir(parents=True, exist_ok=True)  # mkdir -p (no error if exists)
+# print(sorted(Path("data").glob("**/*.csv")))          # recursive find
+# NEVER: "data" + "/" + name (breaks on Windows) or f"C:\\fixed\\{x}" (unportable)</code></pre><div class="out">data/2026/sales.csv
+suffix: .csv | stem: sales | name: sales.csv | parent: data/2026
+exists: False
+parts: ('data', '2026', 'sales.csv')
+as_json: data/2026/sales.json</div></div>
+<p><strong>Relative vs absolute + the cwd trap.</strong> Relative paths (<code>"data/x.csv"</code>) resolve against the <em>current working directory</em> (where you launched Python — not where the script lives!). Scripts run from another folder break. Robust script pattern: anchor to the <em>script's own location</em>: <code>HERE = Path(__file__).resolve().parent; DATA = HERE / "data" / "x.csv"</code> (Chapter 16 explains <code>__file__</code>). Notebooks: <code>%pwd</code> + absolute-or-anchored paths for anything shared.</p>
+
+<h3>15.6 Professional I/O patterns: atomic writes, encodings fallback, size guards</h3>
+<div class="code-block"><div class="code-head">atomic write (crash-safe outputs) <button class="copy-btn">Copy</button></div><pre><code>import os, tempfile
+from pathlib import Path
+
+def atomic_write_text(path, text, encoding="utf-8"):
+    """Write text so readers NEVER see a half-written file (crash-safe)."""
+    path = Path(path)
+    fd, tmp = tempfile.mkstemp(dir=str(path.parent), prefix=path.name + ".", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding=encoding) as f:  # fd owned from here
+            f.write(text)
+            f.flush()
+            os.fsync(f.fileno())       # force bytes to DISK (not just OS buffers)
+        os.replace(tmp, path)          # ATOMIC rename (POSIX + Windows): instant swap
+    except BaseException:
+        try: os.unlink(tmp)
+        except OSError: pass
+        raise
+
+atomic_write_text("report.txt", "all good\n")
+print(Path("report.txt").read_text(encoding="utf-8"))</code></pre><div class="out">all good
+</div></div>
+<p><strong>Step-by-step (crash windows).</strong> Without atomicity, a crash mid-<code>"w"</code> leaves a <em>truncated</em> file (readers see garbage). With atomic write: crashes during temp-write leave the <em>old</em> file intact (+ an orphaned temp, cleaned on retry); <code>os.replace</code> swaps names atomically (readers see old <em>or</em> new, never half). <code>fsync</code> closes the OS-crash window (power loss with data still in page cache). Cost: one extra copy + fsync latency — pay it for checkpoints, configs, and published datasets; skip for throwaway temps.</p>
+<div class="code-block"><div class="code-head">encoding fallback + size guard (defensive loader front-end) <button class="copy-btn">Copy</button></div><pre><code>from pathlib import Path
+
+def read_text_flexible(path, encodings=("utf-8-sig", "utf-8", "cp1252")):
+    """Try encodings in order; report which worked (logged in real code)."""
+    data = Path(path).read_bytes()
+    for enc in encodings:
+        try:
+            return data.decode(enc), enc
+        except UnicodeDecodeError:
+            continue
+    raise UnicodeDecodeError("none of tried encodings worked", data, 0, 1, "")
+
+def guarded_size(path, limit_mb=500):
+    size_mb = Path(path).stat().st_size / 1e6
+    if size_mb &gt; limit_mb:
+        raise ValueError(f"{path} is {size_mb:.0f}MB &gt; {limit_mb}MB — stream it, don't load it!")
+    return size_mb
+
+Path("flex.txt").write_text("café\n", encoding="utf-8")
+print(read_text_flexible("flex.txt"))
+print("size MB:", guarded_size("flex.txt"))</code></pre><div class="out">('café\n', 'utf-8-sig')
+size MB: 6e-06</div></div>
+<div class="callout warn"><strong class="t">⚠️ Encoding fallback honesty</strong>Fallback <em>guesses</em> — <code>cp1252</code> decodes <em>any</em> byte sequence (never raises!), so it can "succeed" into mojibake. Always <em>report which encoding worked</em> (log it!) and prefer <em>knowing</em> the source encoding (ask the producer, check the spec) over guessing. <code>utf-8-sig</code> first also transparently handles Excel's BOM.</div>
+
+<h3>15.7 The DS workflow pattern (everything composed)</h3>
+<div class="diagram"><strong>Figure 15.1 — Load → inspect → clean → analyze → write (Ch. 25 expands this)</strong><div class="flow"><div class="fstep">Path exists? size sane? (guard)</div><div class="farrow">↓ DictReader (streaming) + per-row convert (collect errors!)</div><div class="fstep">inspect: shape, columns, missing report, samples</div><div class="farrow">↓ pure functions (Ch. 11): clean → derive → group → aggregate</div><div class="fstep">report + atomic-write results (CSV/JSON)</div></div></div>
+<div class="callout good"><strong class="t">✅ Checklist before any analysis runs</strong>☐ <code>with + encoding</code> always · ☐ <code>newline=""</code> for csv · ☐ stream (never <code>read()</code> blind) · ☐ convert types at the boundary with error collection · ☐ log every drop/fill · ☐ anchor paths (<code>Path(__file__).parent</code> in scripts) · ☐ atomic-write precious outputs. Projects 2–4 grade you on exactly this list.</div>
+
+<h3>15.8 Interview questions</h3>
+<details><summary>Q1: Why `with open(...)`? What breaks without it?</summary><div class="inner"><code>with</code> guarantees <code>close()</code> (flush + handle release) via <code>__exit__</code>, even on exceptions/returns. Without it: crashed writes lose buffered data (truncated files), handles leak (resource exhaustion in long jobs), and Windows locks files open. It's the context-manager protocol (Ch. 21) — files are its canonical use.</div></details>
+<details><summary>Q2: Why must csv files open with newline=""? Why is csv data all strings?</summary><div class="inner">The csv module handles newlines itself (quoted fields embed them); universal-newline translation would double them (blank rows on Windows). All values are strings because CSV carries no type information — conversion (int/float/date) with error handling is the reader's job, at the boundary.</div></details>
+<details><summary>Q3: How do you safely overwrite an important output file? What crash windows exist?</summary><div class="inner">Atomic write: temp file in same directory → write → flush → fsync → <code>os.replace</code> (atomic rename). Windows closed: mid-write crash (old intact), OS crash pre-fsync (fsync forces disk), partial visibility (rename is instant). Readers see old-or-new, never half. (§15.6 implementation.)</div></details>
+<details><summary>Q4: Your script works in one folder but FileNotFounds in another. Diagnose.</summary><div class="inner">Relative paths resolve against the <em>process cwd</em>, not the script's folder. Fix: anchor to <code>Path(__file__).resolve().parent</code> for script-adjacent data; accept absolute/config paths for the rest; print <code>Path.cwd()</code> when diagnosing. Never assume launch directory.</div></details>
+
+<h3>15.9 Exercises</h3>
+<div class="ex L1"><span class="pill">Level 1 · Understand</span><ol><li>Write/read a 3-line file with <code>with</code>; contrast <code>read()</code> vs iteration outputs (show <code>repr</code>). Explain buffering in one paragraph.</li><li>Demonstrate <code>"w"</code>-clobber on a scratch file, then protect the same flow with <code>"x"</code> (show the <code>FileExistsError</code>) and with atomic write.</li><li>Corrupt a CSV with <code>split(",")</code> vs <code>csv.reader</code> on a quoted-comma field; explain every divergent character.</li></ol></div>
+<div class="ex L2"><span class="pill">Level 2 · Apply</span><ol><li><code>head/tail/grep_count(path, …)</code> — all streaming, all O(1) memory. Prove memory-flatness on a 500MB generated file (generate programmatically!).</li><li>Convert CSV→JSON and JSON→CSV round-trips preserving types (numbers stay numbers — where do you convert, and how do you verify?).</li><li>Implement <code>read_text_flexible</code> + BOM handling; craft utf-8/cp1252/BOM fixtures and show each detected correctly.</li></ol></div>
+<div class="ex L3"><span class="pill">Level 3 · Interview</span><ol><li>Design the §15.7 pipeline for a 20GB CSV on a 4GB machine: streaming DictReader → validated generator → chunked aggregates → atomic outputs. State memory at each stage and what breaks if any stage materializes.</li><li>Audit: find 5 I/O sins in a provided script (missing encoding, no newline="", read() on huge file, same in/out path, silent drops) — fix each with justification.</li></ol></div>
+<h3>15.10 Mini-challenge 🏆</h3>
+<div class="ex L2"><span class="pill">Challenge</span><p><strong>Build <code>file_lab.py</code>.</strong> Given any text/CSV/JSON path: report size, encoding detection attempts, line/row counts (streamed), CSV dialect + fieldnames + 3 sample rows, JSON top-level shape + key sample — then write a <code>.report.json</code> summary <em>atomically</em>. One tool, every §15.7 checklist item, zero full-file loads. This is the inspector every data team wishes it had on day one.</p></div>
+<div class="callout good"><strong class="t">🏁 Chapter summary → next</strong><strong>Remember:</strong> <code>with + encoding</code> always (flush/close guaranteed) · <code>"w"</code> clobbers instantly (<code>"x"</code>/atomic for safety) · stream by default (<code>read()</code> only when sized) · <code>csv</code> module + <code>newline=""</code> (never <code>split</code>; values are strings — convert!) · <code>json</code> round-trips (JSONL streams) · <code>pathlib</code> over string paths (anchor to <code>__file__</code>) · atomic-write precious outputs. <strong>Next:</strong> Chapter 16 — modules &amp; packages at full depth: organizing code beyond one file, imports, and the <code>__main__</code> guard.</div>
+</div></section>

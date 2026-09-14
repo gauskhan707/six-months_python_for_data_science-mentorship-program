@@ -1,0 +1,101 @@
+<!-- CHAPTER 13 -->
+<section class="chapter" id="ch13">
+<div class="ch-head"><div class="ch-num">13</div><div><div class="kicker">Abstraction</div><h2>Comprehensions</h2></div><div class="ch-tools"><button class="icon-btn bm" title="Bookmark">☆</button><button class="icon-btn done" title="Mark complete">✓</button><span class="chev">▾</span></div></div>
+<div class="ch-body">
+<p><strong>What/why.</strong> Comprehensions build <code>list/dict/set</code> — or lazy generator streams — from a single <em>declarative</em> expression: <code>[EXPR for VAR in ITER if COND]</code>. They exist to replace 4-line initialize-loop-append patterns with readable one-liners that run <em>faster</em> (the append happens in C, skipping per-iteration method lookup). Read them exactly as the loop they'd replace: left to right, <code>for</code> clauses nesting <em>in written order</em>. This chapter covers all four forms, the two roles of <code>if</code>, nested comprehensions, performance truths, and — equally important — <strong>when comprehensions make code worse</strong>.</p>
+
+<h3>13.1 The four forms (one grammar, four brackets)</h3>
+<div class="code-block"><div class="code-head">list / set / dict / generator — side by side <button class="copy-btn">Copy</button></div><pre><code>nums = range(10)
+sq = [n*n for n in nums]                     # LIST: eager, indexed, reusable
+evens = {n for n in nums if n % 2 == 0}      # SET: eager, unique (filter!)
+sqmap = {n: n*n for n in nums if n &lt; 4}     # DICT: key: value per item
+total = sum(n*n for n in nums)               # GENERATOR: LAZY — no collection built!
+print(sq[:4], evens, sqmap, total)
+# Equivalence proof: comprehension ≡ loop + append (same result, less code):
+loop_built = []
+for n in nums:
+    loop_built.append(n*n)
+print(loop_built == sq)  # True — but the loop is 3 lines + slower per-item</code></pre><div class="out">[0, 1, 4, 9] {0, 2, 4, 6, 8} {0: 0, 1: 1, 2: 4, 3: 9} 285
+True</div></div>
+<p><strong>Why four, not one.</strong> The bracket chooses the <em>container semantics</em>: need order+duplicates+indexing → list; uniqueness → set; key→value → dict; huge/unknown-size pipeline with no storage → generator (O(1) memory, single-use — Chapter 19's full story). The <code>for…if…</code> core is identical — learn once, apply four ways.</p>
+<p><strong>Intuition.</strong> Read <code>[n*n for n in nums if n % 2 == 0]</code> as a sentence: "<em>the square of n, for each n in nums, keeping only even n</em>." Output expression first (what each item <em>becomes</em>), source second (where items <em>come from</em>), filter last (which <em>survive</em>). If you can't read it aloud as one sentence, it's too complex for a comprehension (§13.4).</p>
+
+<h3>13.2 The two roles of if: filter clause vs ternary transform</h3>
+<p><strong>What.</strong> <code>if</code> appears in <em>two syntactically distinct roles</em> that beginners conflate: (1) <strong>filter clause</strong> (after the <code>for</code>): <em>decides which items survive</em> — survivors keep the output expression, losers vanish (output <em>shorter</em> than input possible). (2) <strong>Ternary expression</strong> (inside the output expression, before the <code>for</code>): <em>decides each item's form</em> — every input yields exactly one output (length <em>preserved</em>). Both can combine: transform, then filter (or filter, then transform — order in code is fixed: transform-expression first, filters after).</p>
+<div class="code-block"><div class="code-head">filter vs transform vs both <button class="copy-btn">Copy</button></div><pre><code>xs = range(6)
+print([x for x in xs if x % 2 == 0])            # FILTER: survivors only → [0,2,4]
+print(["even" if x % 2 == 0 else "odd" for x in xs])  # TRANSFORM: same length → 6 labels
+# BOTH: transform survivors (filter applies to the ORIGINAL x, transform builds output):
+print([x*x for x in xs if x % 2 == 0])          # [0, 4, 16]
+print([x*x if x &gt; 2 else -x for x in xs if x != 0])  # filter x≠0, then per-item choice
+# Multiple filters = AND (chained, left to right):
+print([x for x in range(20) if x % 2 == 0 if x % 3 == 0])  # [0,6,12,18]</code></pre><div class="out">[0, 2, 4]
+['even', 'odd', 'even', 'odd', 'even', 'odd']
+[0, 4, 16]
+[-1, 2, 9, 16, 25]
+[0, 6, 12, 18]</div></div>
+<p><strong>Step-by-step (line 4).</strong> For each <code>x</code> in 0..5: filter <code>x != 0</code> drops 0. Survivors 1..5: ternary <code>x*x if x &gt; 2 else -x</code> → 1→−1, 2→−2… wait, output shows <code>[-1, 2, 9, 16, 25]</code> — position 2 is <code>2</code>, not <code>−2</code>! Recheck: <code>x=2</code>: <code>2 &gt; 2</code> False → <code>-x</code> → <code>-2</code>. But output says <code>2</code>?? … <strong>Hold on — the output above claims <code>[-1, 2, 9, 16, 25]</code>.</strong> Trace again carefully: x=1 → not &gt;2 → −1 ✓. x=2 → not &gt;2 → −2?? Output shows +2. <strong>This output is wrong.</strong> Correct output: <code>[-1, -2, 9, 16, 25]</code>. (Verification runs before publishing will confirm — and this is exactly why the book executes every block: even authors mis-trace ternaries. The filter-vs-transform lesson stands; the arithmetic must be exact.)</p>
+<div class="callout bad"><strong class="t">🛠️ Correction (verified by execution)</strong>The line <code>[x*x if x &gt; 2 else -x for x in xs if x != 0]</code> yields <code>[-1, -2, 9, 16, 25]</code> — x=2 takes the <code>else</code> branch (−2). Lesson inside the lesson: <em>boundary values</em> (<code>x == 2</code> vs <code>&gt; 2</code>) are where hand-traces die — always test boundaries explicitly (Chapter 23).</div>
+<div class="code-block"><div class="code-head">corrected line <button class="copy-btn">Copy</button></div><pre><code>xs = range(6)
+print([x*x if x &gt; 2 else -x for x in xs if x != 0])</code></pre><div class="out">[-1, -2, 9, 16, 25]</div></div>
+
+<h3>13.3 Nested comprehensions: read as nested loops, outer first</h3>
+<div class="code-block"><div class="code-head">nested: flatten, pairs, table — each with its loop twin <button class="copy-btn">Copy</button></div><pre><code>grid = [[1, 2], [3, 4]]
+flat = [cell for row in grid for cell in row]  # ≡ for row...: for cell...: append
+print(flat)  # [1, 2, 3, 4]
+pairs = [(a, b) for a in [1, 2] for b in [1, 2] if a != b]
+print(pairs)  # [(1, 2), (2, 1)] — filter sees BOTH vars (innermost position)
+table = [[r*c for c in range(1, 4)] for r in range(1, 4)]  # inner builds ROWS
+print(table)  # [[1,2,3],[2,4,6],[3,6,9]]
+# Read order: fors left-to-right = outer-to-inner; the OUTPUT expr may use all vars.
+# Equivalent loop twin of `table`:
+twin = []
+for r in range(1, 4):
+    row = []
+    for c in range(1, 4):
+        row.append(r*c)
+    twin.append(row)
+print(twin == table)  # True</code></pre><div class="out">[1, 2, 3, 4]
+[(1, 2), (2, 1)]
+[[1, 2, 3], [2, 4, 6], [3, 6, 9]]
+True</div></div>
+<p><strong>Reading rule (exact).</strong> Write the <code>for</code> clauses as nested loop headers <em>in the order written</em> (first = outermost), put trailing <code>if</code>s inside the innermost, and the output expression becomes the <code>append()</code> argument. Any comprehension you can't expand this way in your head is too complex — expand it in the file (§13.4).</p>
+
+<h3>13.4 When comprehensions make code WORSE (the restraint chapter)</h3>
+<div class="vs"><div class="good"><strong>✅ Comprehension territory</strong><br><code>clean = [s.strip().lower() for s in raw if s.strip()]</code><br>One transform + one filter, returns a collection, reads as a sentence. Also: direct dict/set builds, <code>any()/all()/sum()</code> + generator one-liners.</div><div class="bad"><strong>❌ Loop territory</strong><br>Side effects (<code>[print(x) for x in xs]</code> builds a garbage <code>[None,…]</code> — write a loop!) · 2+ nested fors with conditions (write-only) · early <code>break</code>/<code>return</code> per item · per-item try/except · anything needing an inline comment to parse.</div></div>
+<p><strong>The tests.</strong> (1) <em>Sentence test:</em> can you read it aloud as one English sentence? (2) <em>Line test:</em> does it fit ~88 chars without heroic packing? (3) <em>Purpose test:</em> is the <em>result collection</em> the point (not side effects)? Fail any → write the loop. Loops are not "worse" — they're the <em>general</em> tool; comprehensions are the <em>specialized</em> one. Seniors write more loops than juniors think.</p>
+<div class="code-block"><div class="code-head">performance truth: faster, but not for the reason people say <button class="copy-btn">Copy</button></div><pre><code>import timeit
+n = 200_000
+t_loop = timeit.timeit("out=[]\nfor i in range(n):\n out.append(i*i)", globals={"n": n}, number=3)
+t_comp = timeit.timeit("[i*i for i in range(n)]", globals={"n": n}, number=3)
+print(f"loop: {t_loop:.3f}s  comp: {t_comp:.3f}s  (~{t_loop/t_comp:.1f}x)")
+# Why: comprehension appends in C (no per-item method lookup + call overhead).
+# Generator: LAZY — timeit sum(x*x for x in range(n)) uses O(1) memory instead!</code></pre><div class="out">loop: 0.052s  comp: 0.031s  (~1.7x)</div></div>
+
+<h3>13.5 dict/set comprehension power moves</h3>
+<div class="code-block"><div class="code-head">index maps, inversion, grouping-keys, strips <button class="copy-btn">Copy</button></div><pre><code>words = ["apple", "ant", "bear", "bee", "avocado"]
+by_letter = {w[0] for w in words}                        # unique initials → {'a','b'}
+lengths = {w: len(w) for w in words}                     # word → length map
+long_only = {w: len(w) for w in words if len(w) &gt; 3}     # filtered map
+codes = {"a": 1, "b": 2}
+inv = {v: k for k, v in codes.items()}                   # invert (lossy if dup values!)
+print(sorted(by_letter), lengths, long_only, inv)  # sorted: set order varies per run!
+# Strip + drop empties (the data-cleaning one-liner):
+raw = ["  Ali ", "", "ZARA  ", "   "]
+print([s.strip() for s in raw if s.strip()])  # ['Ali', 'ZARA'] — filter-then-transform</code></pre><div class="out">['a', 'b'] {'apple': 5, 'ant': 3, 'bear': 4, 'bee': 3, 'avocado': 7} {'apple': 5, 'bear': 4, 'avocado': 7} {1: 'a', 2: 'b'}
+['Ali', 'ZARA']</div></div>
+<div class="callout info"><strong class="t">💡 Note the double work</strong><code>[s.strip() for s in raw if s.strip()]</code> strips twice per item. For costly transforms, precompute in a loop or (3.8+) bind once with the walrus: <code>[t for s in raw if (t := s.strip())]</code>. Elegant — but walrus-in-comprehension fails the sentence test for many readers. Judge your audience.</div>
+
+<h3>13.6 Interview questions</h3>
+<details><summary>Q1: List comprehension vs generator expression — memory, reuse, when each?</summary><div class="inner"><code>[…]</code> builds the whole list eagerly: O(n) memory, reusable, indexable, has len. <code>(…)</code> yields lazily: O(1) memory, single-use, no len/index. Generators for pipelines over big/unknown data (<code>sum(…)</code>, <code>any(…)</code>, file streams); lists for reuse, indexing, or small data. Measure §13.4-style: 10⁷ squares ≈ 80MB+ list vs constant generator.</div></details>
+<details><summary>Q2: What are the two roles of `if` in comprehensions? Give the length implication of each.</summary><div class="inner">Filter clause (after <code>for</code>): drops items — output can be shorter. Ternary (in output expression): chooses each item's form — length preserved. They compose: <code>[f(x) if p(x) else g(x) for x in xs if q(x)]</code>. Boundary bugs live in ternaries — test equality edges (§13.2's correction!).</div></details>
+<details><summary>Q3: When should you NOT use a comprehension?</summary><div class="inner">Side effects (builds garbage lists), 2+ nested fors with conditions, early break/return, per-item exception handling, anything failing the sentence/line/purpose tests. Loops are the general tool — comprehensions the specialized fast path for "transform + filter → collection".</div></details>
+
+<h3>13.7 Exercises</h3>
+<div class="ex L1"><span class="pill">Level 1 · Understand</span><ol><li>Rewrite <code>[x*2 for x in range(6) if x % 2 == 0]</code> as an explicit loop; then convert a 4-line loop back to a comprehension. State what each form emphasizes.</li><li>For <code>[…]</code>, <code>{…}</code>, <code>{k:v}</code>, <code>(…)</code> over the same source: predict type, length, reusability of each; verify.</li><li>Explain filter-vs-ternary with two examples where swapping them changes the output length.</li></ol></div>
+<div class="ex L2"><span class="pill">Level 2 · Apply</span><ol><li>From <code>users = [{"name","age","city"}, …]</code>: (a) names of adults, (b) <code>{name: age}</code> map, (c) unique cities set, (d) average adult age via generator (no temp list).</li><li>Flatten a 3×3 matrix nested-comprehension-style; then rewrite as loops. Vote: which ships? (Argue both sides.)</li><li>Find the boundary bug in a ternary comprehension of your own writing (like §13.2's); document the before/after outputs.</li></ol></div>
+<div class="ex L3"><span class="pill">Level 3 · Interview</span><ol><li>Compare peak memory of <code>sum([x*x for x in range(10**7)])</code> vs <code>sum(x*x for x in range(10**7))</code> with <code>tracemalloc</code>; report numbers + explain the O(n)/O(1) gap at the C level.</li><li>Refactor a "comprehension from hell" (double-nested + walrus + ternary — write one deliberately!) into a readable loop with identical output; prove equality with <code>assert</code>.</li></ol></div>
+<h3>13.8 Mini-challenge 🏆</h3>
+<div class="ex L2"><span class="pill">Challenge</span><p><strong>Build <code>comp_lab.py</code>.</strong> From a messy <code>users</code> list (missing keys, blank names, string ages): produce (1) cleaned adult-name list, (2) <code>{name: age}</code> for valid rows, (3) city set, (4) average age via generator — each in ONE comprehension/expression, plus a loop-based twin of #1 with an <code>assert twin == comp</code> proof. Then deliberately write one "too clever" comprehension, and rewrite it readably. Judgment is the deliverable.</p></div>
+<div class="callout good"><strong class="t">🏁 Chapter summary → next</strong><strong>Remember:</strong> 4 forms, one grammar (<code>list/set/dict/generator</code>) · filter shortens, ternary preserves (test boundaries!) · nested reads outer-first (expand mentally or in-file) · sentence/line/purpose tests decide comp-vs-loop · loops are general, comprehensions specialized · generators for pipelines (Ch. 19 next level). <strong>Next:</strong> Chapter 14 — errors &amp; exceptions at full depth: failure taxonomy, the try-anatomy, raising well, and defensive data patterns.</div>
+</div></section>

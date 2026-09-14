@@ -1,0 +1,121 @@
+<!-- CHAPTER 20 -->
+<section class="chapter" id="ch20">
+<div class="ch-head"><div class="ch-num">20</div><div><div class="kicker">Design · style</div><h2>Functional Python</h2></div><div class="ch-tools"><button class="icon-btn bm" title="Bookmark">☆</button><button class="icon-btn done" title="Mark complete">✓</button><span class="chev">▾</span></div></div>
+<div class="ch-body">
+<p><strong>What/why.</strong> <em>Functional style</em> treats computation as <strong>pipelines of transformations over data</strong> — <code>map</code> (transform each), <code>filter</code> (keep some), <code>reduce</code> (fold many to one) — favoring <em>pure functions</em> (same input → same output, no mutation) and <em>immutable flow</em> (new collections, not in-place edits). Python is deliberately <em>multi-paradigm</em>: it offers the functional toolkit (<code>map/filter/reduce</code>, <code>any/all</code>, <code>sorted(key=)</code>, <code>itertools</code>, <code>functools</code>, <code>operator</code>) while blessing comprehensions and loops as equals. The honest stance this chapter teaches: <strong>borrow functional tools where they clarify, keep explicit code where it reads better</strong> — with precise rules for each call.</p>
+
+<h3>20.1 map / filter / reduce: the trinity (with comprehension twins)</h3>
+<p><strong>What.</strong> <code>map(f, it)</code>: lazy iterator of <code>f(x)</code> per item. <code>filter(p, it)</code>: lazy iterator of items where <code>p(x)</code> is truthy (<code>filter(None, it)</code> drops falsies!). <code>functools.reduce(f, it, init)</code>: folds left — <code>acc = f(acc, x)</code> per item, starting at <code>init</code> (or the first item if omitted — empty + no-init → TypeError). All lazy except the final <code>reduce</code> (must consume everything to fold).</p>
+<div class="code-block"><div class="code-head">trinity + twins + reduce mechanics <button class="copy-btn">Copy</button></div><pre><code>from functools import reduce
+nums = [1, 2, 3, 4, 5]
+print(list(map(lambda x: x * 2, nums)))        # [2,4,6,8,10] — twin: [x*2 for x in nums]
+print(list(filter(lambda x: x % 2 == 0, nums)))  # [2,4] — twin: [x for x in nums if ...]
+print(reduce(lambda a, b: a + b, nums, 0))     # 15 — twin: sum(nums)!
+# reduce, step by step (acc=0): f(0,1)=1 → f(1,2)=3 → f(3,3)=6 → f(6,4)=10 → f(10,5)=15
+print(list(filter(None, [0, 1, "", "a", [], [2]])))  # [1, 'a', [2]] — drop FALSIES!
+print(list(map(str.strip, ["  a ", "b  "])))   # NAMED fn — map's best look (no lambda!)
+print(list(map(int, ["1", "2"])))              # [1, 2] — builtin as mapper
+# Multi-iterable map (stops at shortest — zip-like!):
+print(list(map(lambda a, b: a + b, [1, 2], [10, 20, 30])))  # [11, 22]</code></pre><div class="out">[2, 4, 6, 8, 10]
+[2, 4]
+15
+[1, 'a', [2]]
+['a', 'b']
+[1, 2]
+[11, 22]</div></div>
+<p><strong>The verdict rule (memorize).</strong> <code>map(f, …)</code>/<code>filter(p, …)</code> with an <em>existing named function/builtin</em> (<code>map(str.strip, lines)</code>, <code>map(int, cells)</code>) — clean, lazy, idiomatic. With a <code>lambda</code> — the comprehension twin <em>almost always</em> reads better (<code>[x*2 for x in xs]</code> beats <code>map(lambda x: x*2, xs)</code> on every axis: named intent, no lambda tax, familiar). <code>reduce</code>: reach for the <em>named builtin first</em> (<code>sum/min/max/any/all/math.prod</code>) — genuine folds (<code>operator.mul</code> products pre-3.8, function composition, merging) earn <code>reduce</code>.</p>
+
+<h3>20.2 any / all: the quantifiers (short-circuiting!)</h3>
+<div class="code-block"><div class="code-head">existential + universal checks, lazily <button class="copy-btn">Copy</button></div><pre><code>nums = [1, 2, 3, 4, 5]
+print(any(x &gt; 4 for x in nums))   # True — stops AT 5 (short-circuits!)
+print(all(x &gt; 0 for x in nums))   # True — must verify ALL
+print(any([]), all([]))            # False True — vacuous truth (all of nothing = True!)
+# Probe the short-circuit (watch what RUNS):
+def probe(x):
+    print(f"  check {x}")
+    return x &gt; 2
+print(any(probe(x) for x in [1, 2, 3, 4]))  # checks 1,2,3 then STOPS (4 never probed)
+# Real uses: validation gates
+rows = [{"age": 30}, {"age": -1}]
+print("any invalid:", any(r["age"] &lt; 0 for r in rows))
+print("all have age:", all("age" in r for r in rows))</code></pre><div class="out">True
+True
+False True
+  check 1
+  check 2
+  check 3
+True
+any invalid: True
+all have age: True</div></div>
+<p><strong>Why <code>all([]) == True</code>.</strong> <em>Vacuous truth</em>: "every element satisfies P" with no elements has no counterexample — True (matches math/logic; also makes <code>all(checks)</code> the correct default-pass gate). Beginners expect False — now you know, and can explain it in interviews (it's asked!).</p>
+
+<h3>20.3 itertools: the lazy combinator library (infinite-safe)</h3>
+<div class="code-block"><div class="code-head">itertools working set <button class="copy-btn">Copy</button></div><pre><code>import itertools
+print(list(itertools.chain([1, 2], "ab", (3,))))   # flatten ONE level → [1,2,'a','b',3]
+print(list(itertools.islice(range(10**9), 5)))     # lazy take (infinite-safe!) → [0..4]
+print(list(itertools.islice(range(10), 2, 8, 2)))  # islice(iter, start, stop, step)
+print(list(itertools.islice(itertools.count(10, 2), 4)))  # count is INFINITE — islice takes 4!
+print(list(itertools.repeat("x", 3)))              # ['x','x','x'] (repeat() alone = infinite!)
+print(list(itertools.islice(itertools.cycle("AB"), 5)))  # ABABA (cycle infinite — islice takes 5!)
+# groupby: groups CONSECUTIVE runs (SORT first for global grouping!)
+data = sorted(["ant", "apple", "bear", "bee", "avocado"])
+for key, grp in itertools.groupby(data, key=lambda w: w[0]):
+    print(key, "→", list(grp))
+# Combinatorics (CAREFUL: sizes explode — n=100 pairs = 4950, triples = 161700!):
+print(list(itertools.combinations([1, 2, 3], 2)))  # pairs, no repeat, order-free
+print(list(itertools.product("AB", "12")))         # cartesian: A1 A2 B1 B2</code></pre><div class="out">[1, 2, 'a', 'b', 3]
+[0, 1, 2, 3, 4]
+[2, 4, 6]
+[10, 12, 14, 16]
+['x', 'x', 'x']
+['A', 'B', 'A', 'B', 'A']
+a → ['ant', 'apple', 'avocado']
+b → ['bear', 'bee']
+[(1, 2), (1, 3), (2, 3)]
+[('A', '1'), ('A', '2'), ('B', '1'), ('B', '2')]</div></div>
+<p><strong><code>groupby` trap (bites everyone once).</strong> It groups <em>consecutive</em> equal keys — unsorted input yields <em>multiple fragments</em> per key (<code>['a1','b1','a2']</code> → a:[a1], b:[b1], a:[a2] — TWO 'a' groups!). For global grouping: <code>sorted</code> first (O(n log n)) or <code>defaultdict(list)</code> (O(n), any order — §8.3). Also: groups are <em>lazy iterators sharing the source</em> — consume each fully before advancing (materialize with <code>list(grp)</code> immediately, as above).</p>
+
+<h3>20.4 functools + operator: memoize, partialize, and ditch lambdas</h3>
+<div class="code-block"><div class="code-head">lru_cache + partial + operator (lambda killers) <button class="copy-btn">Copy</button></div><pre><code>import functools, operator
+@functools.lru_cache(maxsize=None)   # MEMOIZE: cache arg→result FOREVER (pure fns only!)
+def fib(n):
+    return n if n &lt; 2 else fib(n-1) + fib(n-2)
+print(fib(100))                      # instant (each n computed once — §11.6)
+print(fib.cache_info())              # hits/misses/size — PROVE the memoization!
+# cachetools-style caution: args must be HASHABLE (no lists!); unbounded growth on wild inputs → maxsize=N + TTL externally
+
+def power(base, exp):
+    return base ** exp
+square = functools.partial(power, exp=2)   # FREEZE some args → new fn (no lambda!)
+print(square(9))                           # 81 — partial(power, exp=2)(9) = power(9, exp=2)
+from operator import itemgetter, attrgetter, methodcaller, mul
+rows = [{"n": "b", "v": 2}, {"n": "a", "v": 1}]
+print(sorted(rows, key=itemgetter("v")))   # sort by ['v'] — faster + clearer than lambda!
+print(sorted("ba", key=methodcaller("upper")))  # call .upper() per item
+print(functools.reduce(mul, [1, 2, 3, 4], 1))  # 24 — operator.mul beats lambda a,b!
+print(list(map(operator.add, [1, 2], [10, 20])))  # [11, 22] — no lambda anywhere</code></pre><div class="out">354224848179261915075
+CacheInfo(hits=98, misses=101, maxsize=None, currsize=101)
+81
+[{'n': 'a', 'v': 1}, {'n': 'b', 'v': 2}]
+['a', 'b']
+24
+[11, 22]</div></div>
+<p><strong><code>lru_cache` contract (exact).</strong> Caches by <em>argument equality+hash</em> — same args → same object returned (identity too!). Requires: pure function (no side effects — they'd run once then vanish!), hashable args (tuples/frozensets, not lists/dicts), bounded input space (else <code>maxsize</code> + eviction). Thread-safe (locked). <code>cache_info()/cache_clear()</code> for ops. Poison risk: caching functions of <em>time/random/IO</em> freezes the first answer — a real production bug shape.</p>
+
+<h3>20.5 Purity, immutability flow, and when loops win (the judgment)</h3>
+<div class="vs"><div class="good"><strong>✅ Functional wins</strong><br><code>any/all</code> gates · <code>sorted(key=itemgetter)</code> · <code>lru_cache</code> on pure recursion · <code>itertools</code> lazy pipelines (chain/islice/count) · <code>map</code> with <em>named</em> fns · <code>operator</code> over lambdas · <code>Counter/groupby</code> reductions · immutable transforms (<code>new = f(old)</code>) in concurrent/pipeline code.</div><div class="bad"><strong>❌ Explicit wins</strong><br>Side effects (I/O, mutation, logging) · complex per-item branching · early exit with cleanup · per-item try/except · <code>map/filter</code> with <code>lambda</code> (comprehension twin!) · <code>reduce</code> where a builtin exists · anything a teammate re-reads twice. Readability > paradigm purity — always.</div></div>
+<p><strong>Purity pays in data pipelines.</strong> Pure stages (<code>cleaned = clean(raw)</code>, no mutation) are: trivially testable (<code>assert clean(x) == y</code>), safely reorderable/parallelizable, replayable (re-run any prefix), and cacheable (<code>lru_cache</code> on deterministic transforms). Impurity (in-place mutation, globals, prints) breaks all four. Architecture: <em>pure core, imperative shell</em> — I/O at edges (read inputs, write outputs), pure transforms inside (Project 5's <code>Dataset</code> methods model this).</p>
+
+<h3>20.6 Interview questions</h3>
+<details><summary>Q1: map/filter vs comprehensions — when is each better? What about reduce?</summary><div class="inner"><code>map/filter</code> win with existing named functions/builtins (<code>map(str.strip, lines)</code> — lazy, clean). With <code>lambda</code>, comprehension twins almost always read better. <code>reduce</code> loses to named builtins (<code>sum/min/max/any/math.prod</code>) — genuine folds (composition, merging, custom monoids) earn it. Laziness: map/filter return iterators (single-use!); comprehensions build (reusable).</div></details>
+<details><summary>Q2: Why is all([]) True? Give a production use where that default matters.</summary><div class="inner">Vacuous truth — no counterexample exists. Matters: validation gates (<code>all(checks)</code> with zero checks = pass — correct for "nothing to violate"), permission conjunctions, and CI "all jobs green" with zero jobs. <code>any([])</code> = False symmetrically ("something found" needs evidence).</div></details>
+<details><summary>Q3: lru_cache contract: requirements, risks, introspection?</summary><div class="inner">Requires pure fn + hashable args + bounded input space. Risks: caching time/IO/random (frozen answers!), unbounded growth (use maxsize), unhashable args (TypeError), memory leaks via long-lived caches. Introspect: <code>cache_info()</code> (hits/misses), <code>cache_clear()</code>. Thread-safe. (§20.4 demo.)</div></details>
+
+<h3>20.7 Exercises</h3>
+<div class="ex L1"><span class="pill">Level 1 · Understand</span><ol><li>Rewrite 3 <code>map/filter</code> examples as comprehensions and 3 comprehensions as <code>map/filter</code>; vote readability each time with a one-line reason.</li><li>Prove <code>any()</code> short-circuits with a print-probe (§20.2); then prove <code>all([])</code>/<code>any([])</code> values and explain vacuous truth aloud.</li><li>Show <code>groupby</code> fragmenting unsorted input; fix with <code>sorted</code>; then redo with <code>defaultdict</code> (no sort). Compare.</li></ol></div>
+<div class="ex L2"><span class="pill">Level 2 · Apply</span><ol><li>Time <code>fib(30)</code> ± <code>lru_cache</code> with <code>cache_info()</code> evidence; explain the exponential→linear collapse via call counts.</li><li>Lazy pipeline: <code>chain</code> two files' lines → <code>filter</code> errors → <code>islice</code> first 10 — all O(1); prove no full read (instrument with probes).</li><li>Replace 5 lambdas with <code>operator</code> (<code>itemgetter/attrgetter/methodcaller/add/mul</code>); measure readability delta (lines + re-reads).</li></ol></div>
+<div class="ex L3"><span class="pill">Level 3 · Interview</span><ol><li>Implement <code>my_map/my_filter/my_reduce</code> as lazy generators from scratch; match builtin edge semantics (empty + no-init TypeError for reduce).</li><li>Design a pure-core/imperative-shell refactor of an I/O-mixed script: draw the boundary, name each pure function, and show the before/after test-ability (write 3 tests impossible before).</li></ol></div>
+<h3>20.8 Mini-challenge 🏆</h3>
+<div class="ex L2"><span class="pill">Challenge</span><p><strong>Build <code>func_style_lab.py</code>.</strong> Solve "top-3 error codes from two log files" THREE ways (explicit loops, comprehension+Counter, itertools-pipeline) with identical asserted outputs + timings + peak-memory notes. Then write the team guideline (10 lines): when THIS team uses each style. Paradigm judgment, documented.</p></div>
+<div class="callout good"><strong class="t">🏁 Chapter summary → next</strong><strong>Remember:</strong> trinity (<code>map/filter/reduce</code>) + twins rule (named-fn → functional; lambda → comprehension; builtin-reduction first) · <code>any/all</code> short-circuit (<code>all([])</code> True!) · <code>itertools</code> lazy combinators (<code>groupby</code> needs sorted!) · <code>lru_cache</code> for pure+hashable+bounded · <code>operator/partial</code> kill lambdas · pure core, imperative shell. <strong>Next:</strong> Chapter 21 — decorators &amp; context managers at full depth: the two power patterns behind professional Python.</div>
+</div></section>

@@ -1,0 +1,196 @@
+<!-- CHAPTER 7 -->
+<section class="chapter" id="ch07">
+<div class="ch-head"><div class="ch-num">7</div><div><div class="kicker">Collections</div><h2>Lists</h2></div><div class="ch-tools"><button class="icon-btn bm" title="Bookmark">☆</button><button class="icon-btn done" title="Mark complete">✓</button><span class="chev">▾</span></div></div>
+<div class="ch-body">
+<p><strong>What/why.</strong> A <code>list</code> is an <em>ordered, mutable, heterogeneous sequence</em> — Python's default "bunch of things in order" container. Internally a <em>dynamic array of references</em>: indexing is O(1), appending is amortized O(1) (occasional resize copies), inserting/removing at the front is O(n) (everything shifts). Lists exist because most data is <em>sequential and evolving</em> — rows arrive, scores update, queues reorder — and you need one container that grows, shrinks, sorts, and slices freely. <strong>Core law:</strong> a list holds <em>references to objects</em>, not the objects themselves (§3.1's balloons, organized in numbered slots).</p>
+
+<h3>7.1 Creation: literals, multiplication, conversion, comprehensions</h3>
+<div class="code-block"><div class="code-head">every way to build a list <button class="copy-btn">Copy</button></div><pre><code>scores = [88, 92, 75]              # literal — the 95% case
+empty = []                          # empty literal (NOT list() in hot code — slower)
+mixed = ["Ali", 30, True, None]     # heterogeneous — legal (uniform preferred)
+zeros = [0] * 5                     # [0,0,0,0,0] — SAFE: ints immutable
+chars = list("abc")                 # from ANY iterable → ['a','b','c']
+rng = list(range(3))                # [0,1,2]
+squares = [i*i for i in range(5)]   # comprehension → [0,1,4,9,16] (Ch. 13)
+print(scores, empty, mixed, zeros, chars, rng, squares)</code></pre><div class="out">[88, 92, 75] [] ['Ali', 30, True, None] [0, 0, 0, 0, 0] ['a', 'b', 'c'] [0, 1, 2] [0, 1, 4, 9, 16]</div></div>
+<p><strong>Why <code>[0]*5</code> is safe but <code>[[]]*5</code> is a trap.</strong> Multiplication <em>repeats references</em>, not objects: <code>[0]*5</code> holds the same int <code>0</code> five times — harmless, because ints are immutable (rebinding one slot can't affect others). <code>[[]]*5</code> holds the <em>same list object</em> five times — mutating through one slot mutates all five (§3.3's bug family). Rule: <code>*</code> only with immutables; comprehensions for independent mutables (<code>[[] for _ in range(5)]</code>).</p>
+<div class="code-block"><div class="code-head">the multiplication trap, proven + fixed <button class="copy-btn">Copy</button></div><pre><code>bad = [[0]] * 3
+bad[0].append(99)
+print(bad)              # [[0, 99], [0, 99], [0, 99]] — ONE list, 3 aliases!
+print(bad[0] is bad[1]) # True — proof
+good = [[0] for _ in range(3)]  # fresh object PER slot
+good[0].append(99)
+print(good)             # [[0, 99], [0], [0]] — independent ✓
+print(good[0] is good[1])  # False</code></pre><div class="out">[[0, 99], [0, 99], [0, 99]]
+True
+[[0, 99], [0], [0]]
+False</div></div>
+
+<h3>7.2 Indexing, slicing, and unpacking (sequences share the rules)</h3>
+<p><strong>What.</strong> Lists use <em>identical</em> indexing/slicing semantics to strings (Chapter 6): zero-based + negative, stop-exclusive slices that clip instead of raising. New power: slices are <em>assignable</em> (mutability!) — <code>lst[1:3] = [...]</code> splices, and <code>lst[i] = x</code> repoints a single slot.</p>
+<div class="code-block"><div class="code-head">list indexing + slice assignment (strings can't do this!) <button class="copy-btn">Copy</button></div><pre><code>nums = [10, 20, 30, 40, 50]
+print(nums[0], nums[-1], nums[1:4], nums[::-1])  # 10 50 [20,30,40] reversed copy
+nums[0] = 99          # repoint slot 0 (rebinding, NOT mutation of int 10)
+print(nums)           # [99, 20, 30, 40, 50]
+nums[1:3] = [7]       # SPLICE: replace 2 slots with 1 (list SHRINKS)
+print(nums)           # [99, 7, 40, 50]
+nums[2:2] = [8, 9]    # insert WITHOUT removing (empty slice = pure insertion)
+print(nums)           # [99, 7, 8, 9, 40, 50]
+del nums[0]           # remove slot 0 (shifts left) → [7, 8, 9, 40, 50]
+del nums[::2]         # delete every 2nd → [8, 40]
+print(nums)
+a, b = [1, 2]         # unpack (length must match) — tuples/lists both
+first, *rest = [1, 2, 3, 4]
+print(a, b, first, rest)  # 1 2 1 [2, 3, 4]</code></pre><div class="out">10 50 [20, 30, 40] [50, 40, 30, 20, 10]
+[99, 20, 30, 40, 50]
+[99, 7, 40, 50]
+[99, 7, 8, 9, 40, 50]
+[8, 40]
+1 2 1 [2, 3, 4]</div></div>
+<p><strong>Step-by-step (splice <code>nums[1:3] = [7]</code>).</strong> The slice selects slots 1–2 (<code>[20, 30]</code>); assignment <em>removes those slots and inserts</em> the right side's items at that position — lengths need not match, so the list grows/shrinks. <code>nums[2:2] = [8,9]</code> selects an <em>empty</em> span (gap 2), so nothing is removed — pure insertion. <code>del nums[::2]</code> removes slots 0,2,4,… in one pass. These are the primitives behind every "edit a sequence in place" algorithm.</p>
+
+<h3>7.3 The method map: add, remove, reorder, query</h3>
+<table><tr><th>Method</th><th>Does</th><th>Returns</th><th>Cost / gotcha</th></tr>
+<tr><td><code>append(x)</code></td><td>Add one item at end</td><td><code>None</code></td><td>Amortized O(1); don't chain/print the result</td></tr>
+<tr><td><code>extend(iter)</code></td><td>Add <em>each element</em> of iterable</td><td><code>None</code></td><td><code>extend("ab")</code> adds 'a','b' — vs <code>append("ab")</code> adds one string</td></tr>
+<tr><td><code>insert(i, x)</code></td><td>Insert at position (clips bounds)</td><td><code>None</code></td><td>O(n) shift; frequent front-inserts → <code>collections.deque</code></td></tr>
+<tr><td><code>remove(x)</code></td><td>Delete first item <em>equal to</em> x</td><td><code>None</code></td><td>O(n) search; <code>ValueError</code> if absent — test <code>in</code> first</td></tr>
+<tr><td><code>pop(i=-1)</code></td><td>Remove at position <em>and return it</em></td><td>The item</td><td>O(1) at end, O(n) elsewhere; empty → <code>IndexError</code>; <code>pop(0)</code> is O(n) — deque for queues</td></tr>
+<tr><td><code>clear()</code></td><td>Remove all</td><td><code>None</code></td><td>Same object emptied (aliases see it!)</td></tr>
+<tr><td><code>index(x[, i[, j]])</code></td><td>Position of first equal item in range</td><td>int</td><td>O(n); <code>ValueError</code> if absent</td></tr>
+<tr><td><code>count(x)</code></td><td>Number of equal items</td><td>int</td><td>O(n); for full histograms use <code>collections.Counter</code></td></tr>
+<tr><td><code>sort(*, key, reverse)</code></td><td>Sort in place (stable Timsort)</td><td><code>None</code></td><td>O(n log n); <code>key=</code> transforms for comparison (below)</td></tr>
+<tr><td><code>reverse()</code></td><td>Reverse in place</td><td><code>None</code></td><td>vs <code>reversed()</code> iterator / <code>[::-1]</code> copy</td></tr>
+<tr><td><code>copy()</code></td><td>Shallow copy</td><td>New list</td><td>Outer new, elements shared (§7.5)</td></tr></table>
+<div class="callout warn"><strong class="t">⚠️ In-place methods return None — by design</strong><code>nums = nums.sort()</code> sets <code>nums</code> to <code>None</code> (destroying your data reference!). Python deliberately returns <code>None</code> from mutators so you can't mistake mutation for transformation. Want a new sorted list? <code>sorted(nums)</code> (works on any iterable, original untouched). This None-return convention applies to <code>sort/reverse/append/extend/insert/remove/clear</code> — and to <code>set.add</code>, <code>dict.update</code> (Chapter 8).</div>
+<div class="code-block"><div class="code-head">append vs extend vs + (three different operations!) <button class="copy-btn">Copy</button></div><pre><code>a = [1, 2]
+a.append([3, 4])     # ONE item (a list!) → [1, 2, [3, 4]]
+print(a)
+b = [1, 2]
+b.extend([3, 4])     # EACH element → [1, 2, 3, 4]
+print(b)
+c = [1, 2]
+print(c + [3, 4])    # NEW list [1,2,3,4]; c UNCHANGED [1, 2]
+print(c)
+c += [3, 4]          # IN-PLACE extend (aliases see it!) — §3.7
+print(c)</code></pre><div class="out">[1, 2, [3, 4]]
+[1, 2, 3, 4]
+[1, 2, 3, 4]
+[1, 2]
+[1, 2, 3, 4]</div></div>
+
+<h3>7.4 Sorting like a professional: key=, stability, sorted()</h3>
+<p><strong>What.</strong> <code>list.sort(key=None, reverse=False)</code> sorts in place with <em>Timsort</em> (O(n log n), <em>stable</em>: equal elements keep their original relative order). <code>key=</code> accepts a function applied <em>once per element</em>; sorting compares the <em>keys</em> (Schwartzian transform — no repeated computation). <code>sorted(iterable, …)</code> returns a <em>new list</em>, leaving the input untouched.</p>
+<div class="code-block"><div class="code-head">key functions + stability + multi-pass sorting <button class="copy-btn">Copy</button></div><pre><code>users = [("Ali", 30), ("Zara", 25), ("Omar", 35), ("Hina", 25)]
+by_age = sorted(users, key=lambda u: u[1])   # new list, original kept
+print(by_age)   # Zara25, Hina25, Ali30, Omar35 — note Zara BEFORE Hina (STABLE!)
+users.sort(key=lambda u: u[1], reverse=True)  # in place, descending
+print(users)
+# Multi-criteria: sort by SECONDARY key first, then PRIMARY (stability composes!):
+rows = [("b", 2), ("a", 2), ("a", 1)]
+rows.sort(key=lambda r: r[0])  # secondary: name → [('a',2),('a',1),('b',2)]
+rows.sort(key=lambda r: r[1])  # primary: num → [('a',1),('a',2),('b',2)] names still ordered!
+print(rows)
+# Or single-pass with tuple keys (no lambda needed):
+rows2 = [("b", 2), ("a", 2), ("a", 1)]
+print(sorted(rows2, key=lambda r: (r[1], r[0])))  # same result, one sort
+# Case-insensitive + numeric-string sorting:
+print(sorted(["banana", "Apple", "cherry"], key=str.lower))  # ['Apple','banana','cherry']
+print(sorted(["10", "9", "100"], key=int))  # ['9','10','100'] — NOT lexicographic!</code></pre><div class="out">[('Zara', 25), ('Hina', 25), ('Ali', 30), ('Omar', 35)]
+[('Omar', 35), ('Ali', 30), ('Zara', 25), ('Hina', 25)]
+[('a', 1), ('a', 2), ('b', 2)]
+[('a', 1), ('a', 2), ('b', 2)]
+['Apple', 'banana', 'cherry']
+['9', '10', '100']</div></div>
+<p><strong>Why stability is a superpower.</strong> Because equal-keyed rows keep prior order, you can sort by <em>multiple criteria</em> with successive sorts (least-significant first) — or equivalently with tuple keys. Tuple keys compare element-wise (<code>(1,'a') &lt; (1,'b') &lt; (2,'a')</code>), giving multi-column ORDER BY in one line. Mixed directions (age ascending, name descending)? Sort twice, or negate numerics (<code>key=lambda r: (r.age, reverse-string…)</code> — strings can't negate, so two-pass wins).</p>
+<div class="callout warn"><strong class="t">⚠️ Sorting traps</strong>Mixed types don't compare (<code>[1, "a"].sort()</code> → TypeError — normalize with <code>key=str</code> or clean data first) · <code>key</code> runs once per element (pure + cheap, or precompute) · <code>reverse=True</code> reverses <em>comparisons</em>, not the final list (stability preserved within equal keys — subtly different from <code>sorted(...)[::-1]</code>!) · sorting strings is lexicographic/Unicode-codepoint order (<code>"Z" &lt; "a"</code> — use <code>key=str.lower/casefold</code> for human order).</div>
+
+<h3>7.5 Copying: assignment vs shallow vs deep (the independence ladder)</h3>
+<p><strong>What — three levels of independence:</strong> (1) <code>b = a</code> — <strong>no copy</strong> (alias: one object, two names). (2) <strong>Shallow copy</strong> — new <em>outer</em> list, same <em>inner</em> objects (<code>a.copy()</code>, <code>a[:]</code>, <code>list(a)</code>). Sufficient for <em>flat lists of immutables</em>. (3) <strong>Deep copy</strong> — fully independent clone, recursively (<code>copy.deepcopy(a)</code>). Required for <em>nested structures you will mutate</em>.</p>
+<div class="diagram"><strong>Figure 7.1 — Copy depth, visually (● shared, ○ independent)</strong><div class="mem"><div class="membox"><b>b = a (alias)</b>a ──→ ● [●, ●]<br>b ──┘<br>1 outer, shared inners</div><div class="membox"><b>b = a.copy()</b>a ──→ ● [●, ●]<br>b ──→ ○ [●, ●]<br>2 outers, SAME inners</div><div class="membox"><b>b = deepcopy(a)</b>a ──→ ● [●, ●]<br>b ──→ ○ [○, ○]<br>fully independent</div></div></div>
+<div class="code-block"><div class="code-head">shallow fails on nesting; deep doesn't <button class="copy-btn">Copy</button></div><pre><code>import copy
+a = [[1, 2], [3, 4]]
+shallow = a.copy()        # new outer; inners SHARED (is-proof below)
+deep = copy.deepcopy(a)   # nothing shared
+print(shallow[0] is a[0], deep[0] is a[0])  # True False
+shallow[0].append(99)     # inner shared → a DAMAGED through the "copy"!
+print("a:", a)            # [[1, 2, 99], [3, 4]]
+shallow.append([5])       # outer independent → a's LENGTH untouched ✓
+print("a:", a, "| shallow:", shallow)
+deep[1].append(100)       # deep fully independent → a untouched ✓
+print("a:", a, "| deep:", deep)</code></pre><div class="out">True False
+a: [[1, 2, 99], [3, 4]]
+a: [[1, 2, 99], [3, 4]] | shallow: [[1, 2, 99], [3, 4], [5]]
+a: [[1, 2, 99], [3, 4]] | deep: [[1, 2], [3, 4, 100]]</div></div>
+<p><strong>Step-by-step.</strong> <code>a.copy()</code> allocates a new outer list whose slots reference <em>the same two inner lists</em> (<code>is</code>-True). Appending to <code>shallow[0]</code> mutates the shared inner — visible via <code>a</code>. But <code>shallow.append([5])</code> mutates only the new <em>outer</em> — <code>a</code>'s length is safe. <code>deepcopy</code> recursively clones inners too (<code>is</code>-False everywhere) — full independence at O(size) time and memory.</p>
+<p><strong>Decision rule.</strong> Flat list of immutables (scores, names)? Shallow (<code>.copy()</code>). Nested or mutable elements you'll mutate? <code>deepcopy</code>. Passing to a function that only <em>reads</em>? No copy at all (references are cheap — §3.1). <code>deepcopy</code> caveats: slower, and chokes on exotic objects (open files, locks, generators) — plus it <em>preserves shared structure and cycles</em> via an internal memo (two aliases to one inner stay aliased in the copy — usually what you want).</p>
+
+<h3>7.6 Traversal: values, indices, parallel — and never mutate while iterating</h3>
+<div class="code-block"><div class="code-head">the four traversal idioms <button class="copy-btn">Copy</button></div><pre><code>scores = [88, 92, 75]
+for s in scores:                    # 1. values only (simplest, preferred)
+    print(s, end=" ")
+print()
+for i, s in enumerate(scores):      # 2. index + value (BEST general loop)
+    print(f"[{i}]={s}", end=" ")
+print()
+for i in range(len(scores)):        # 3. indices only — ANTI-pattern (use enumerate!)
+    scores[i] += 1                  # (only legit need: in-place rewrite by index)
+print(scores)
+names = ["Ali", "Zara", "Omar"]
+for n, s in zip(names, scores):     # 4. PARALLEL walk (stops at SHORTEST!)
+    print(f"{n}: {s}")</code></pre><div class="out">88 92 75 
+[0]=88 [1]=92 [2]=75 
+[89, 93, 76]
+Ali: 89
+Zara: 93
+Omar: 76</div></div>
+<div class="callout bad"><strong class="t">🚫 Never mutate a list while iterating it forward</strong>Removing/inserting inside <code>for x in lst:</code> shifts indices under the cursor — elements get <em>skipped silently</em> (no error!). Three fixes: (a) build new: <code>lst = [x for x in lst if keep(x)]</code> (best); (b) iterate a snapshot: <code>for x in lst[:]:</code> + mutate original; (c) iterate <em>reversed indices</em>: <code>for i in range(len(lst)-1, -1, -1):</code> (deletions behind the cursor are safe).</div>
+<div class="code-block"><div class="code-head">the skip bug, demonstrated + fixed <button class="copy-btn">Copy</button></div><pre><code>nums = [1, 2, 3, 4]
+for x in nums:        # ❌ BUG: skips elements!
+    if x % 2 == 0:
+        nums.remove(x)
+print(nums)           # [1, 3] — looks right?! Try [2, 4, 6, 8]:
+nums2 = [2, 4, 6, 8]
+for x in nums2:
+    if x % 2 == 0:
+        nums2.remove(x)
+print(nums2)          # [4, 8] — WRONG! 4 and 8 survived (skipped after shifts)
+fixed = [x for x in [2, 4, 6, 8] if x % 2 != 0]  # ✅ build new
+print(fixed)          # [] — correct</code></pre><div class="out">[1, 3]
+[4, 8]
+[]</div></div>
+<p><strong>Step-by-step (why <code>[4, 8]</code> survives).</strong> Cursor at index 0 (<code>2</code>): remove → list becomes <code>[4,6,8]</code>, cursor advances to index 1 (<code>6</code>) — <code>4</code> (now at index 0) never visited. Remove <code>6</code> → <code>[4,8]</code>, cursor to index 2 — past the end. Loop exits with <code>[4,8]</code> intact. The first example <em>accidentally</em> looked right — the most dangerous kind of bug.</p>
+
+<h3>7.7 Nested lists: matrices, grids, and records</h3>
+<div class="code-block"><div class="code-head">matrix patterns: build, access, flatten, transpose <button class="copy-btn">Copy</button></div><pre><code># ✅ Correct 3×3 (independent rows):
+grid = [[0]*3 for _ in range(3)]
+grid[0][0] = 9
+print(grid)   # [[9,0,0],[0,0,0],[0,0,0]]
+# Access: grid[row][col]; rows: grid[0]; columns: [row[1] for row in grid]
+print("row0:", grid[0], "| col0:", [row[0] for row in grid])
+# Flatten (read as nested loops — outer first):
+flat = [cell for row in grid for cell in row]
+print(flat)
+# Transpose without NumPy:
+m = [[1, 2, 3], [4, 5, 6]]
+print([list(col) for col in zip(*m)])  # [[1,4],[2,5],[3,6]] — zip(*m) unpacks rows as args!</code></pre><div class="out">[[9, 0, 0], [0, 0, 0], [0, 0, 0]]
+row0: [9, 0, 0] | col0: [9, 0, 0]
+[9, 0, 0, 0, 0, 0, 0, 0, 0]
+[[1, 4], [2, 5], [3, 6]]</div></div>
+<p><strong>Step-by-step (<code>zip(*m)</code> transpose).</strong> <code>*m</code> <em>unpacks</em> the matrix into separate row arguments: <code>zip([1,2,3], [4,5,6])</code>. <code>zip</code> then walks them in parallel: <code>(1,4), (2,5), (3,6)</code> — the columns. One line, no indices — and a preview of unpacking power (Chapter 11).</p>
+<div class="callout good"><strong class="t">✅ Data-Science connection</strong>A dataset column is a list; a table is a list of rows (lists) or records (dicts) until Pandas arrives. Sorting with <code>key=</code>, filtering with comprehensions, <code>zip</code>/<code>enumerate</code> traversal, and <code>Counter</code> histograms are daily data operations. Scale note: list-of-rows Python loops are O(n) PVM steps — fine to ~100k rows; millions → NumPy/Pandas vectorization (Ch. 24–25).</div>
+
+<h3>7.8 Interview questions</h3>
+<details><summary>Q1: append vs extend vs + vs +=? Give outputs and aliasing behavior.</summary><div class="inner"><code>append(x)</code>: one item (even if a list → nesting). <code>extend(it)</code>: each element, in place, None returned. <code>+</code>: new list, originals untouched. <code>+=</code> on lists: in-place extend (aliases see it) — unlike <code>lst = lst + …</code> which rebinds. Demo all four with prints + an alias witness.</div></details>
+<details><summary>Q2: sort() vs sorted()? What does key= do? Is Python's sort stable — and why do you care?</summary><div class="inner"><code>sort()</code>: in-place Timsort, returns None. <code>sorted()</code>: new list from any iterable. <code>key=</code>: function applied once per element; sort compares keys. Stable: equal keys keep original order — enables multi-criteria sorting (secondary-first passes or tuple keys).</div></details>
+<details><summary>Q3: Shallow vs deep copy — when does shallow fail? How do you prove sharing?</summary><div class="inner">Shallow copies only the outer container; nested mutables stay shared (<code>is</code>-True) — mutating nested contents through the "copy" damages the original. Prove with <code>is</code> on inners. Use <code>copy.deepcopy</code> for nested structures (O(size), fails on files/locks). Flat immutables: shallow suffices.</div></details>
+<details><summary>Q4: What happens when you remove items while iterating forward? Show + fix.</summary><div class="inner">Index shifting skips elements silently (§7.6's <code>[4,8]</code> demo). Fixes: build a new filtered list (best), iterate a <code>lst[:]</code> snapshot, or walk reversed indices. No error is raised — that's what makes it dangerous.</div></details>
+
+<h3>7.9 Exercises</h3>
+<div class="ex L1"><span class="pill">Level 1 · Understand</span><ol><li>Predict, run, explain with <code>id()</code>: <code>a=[1,2]; b=a; b+=[3]</code> (what is <code>a</code>?) then <code>b=b+[4]</code> (what is <code>a</code> now?).</li><li>Why does <code>[[0]*3]*3</code> break but <code>[[0]*3 for _ in range(3)]</code> work? Prove with <code>is</code>.</li><li>Sort <code>["10","9","100"]</code> three ways: default, <code>key=int</code>, <code>key=len</code>. Explain each order.</li></ol></div>
+<div class="ex L2"><span class="pill">Level 2 · Apply</span><ol><li><code>second_largest(nums)</code> in one pass (no sorting), handling duplicates + short lists. State complexity.</li><li>Rotate a list right by k <em>in place</em> using slice assignment (O(n) time, O(k) or O(1) space — discuss).</li><li>Implement <code>dedupe_keep_order(seq)</code> two ways: loop+seen-set, and <code>dict.fromkeys</code>. Compare.</li></ol></div>
+<div class="ex L3"><span class="pill">Level 3 · Interview</span><ol><li>Merge overlapping intervals <code>[[1,3],[2,6],[8,10],[9,12]]</code> → <code>[[1,6],[8,12]]</code>. Sort-then-sweep; state and justify complexity.</li><li>Implement a minimal <code>deque</code>-vs-<code>list</code> benchmark for 100k left-insertions; explain the O(n)-vs-O(1) gap from the dynamic-array model.</li></ol></div>
+<h3>7.10 Mini-challenge 🏆</h3>
+<div class="ex L2"><span class="pill">Challenge</span><p><strong>Build <code>gradebook.py</code>.</strong> From a list of <code>(name, score)</code> tuples with messy duplicates (same name twice — keep the HIGHER score): produce a ranked leaderboard (score desc, name asc for ties), the class average, and the median — using <code>sorted(key=…)</code>, dict-dedup, and <code>statistics</code>. Then break it deliberately (sort without key, mutate during iteration) and document each failure mode. Leaderboards are group-by-order-aggregate in miniature — Chapter 25's pipeline in pure lists.</p></div>
+<div class="callout good"><strong class="t">🏁 Chapter summary → next</strong><strong>Remember:</strong> dynamic array of references · <code>*</code> repeats refs (immutables only!) · slice assignment splices · mutators return None (<code>sorted()</code> for new) · <code>key=</code> + stability = multi-criteria sorts · alias/shallow/deep ladder (§7.5) · never mutate during forward iteration · <code>zip(*m)</code> transposes. <strong>Next:</strong> Chapter 8 — tuples, sets, and dictionaries at full depth: records, uniqueness, hashing, and the definitive when-to-use-which.</div>
+</div></section>

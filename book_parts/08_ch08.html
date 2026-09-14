@@ -1,0 +1,200 @@
+<!-- CHAPTER 8 -->
+<section class="chapter" id="ch08">
+<div class="ch-head"><div class="ch-num">8</div><div><div class="kicker">Collections</div><h2>Tuples, Sets and Dictionaries</h2></div><div class="ch-tools"><button class="icon-btn bm" title="Bookmark">☆</button><button class="icon-btn done" title="Mark complete">✓</button><span class="chev">▾</span></div></div>
+<div class="ch-body">
+<p><strong>What/why.</strong> Lists carry <em>ordered, changeable</em> data — but three other shapes dominate real code: <strong>tuples</strong> (fixed records that must never change), <strong>sets</strong> (unique membership + group mathematics), <strong>dicts</strong> (label → value lookups — the backbone of records, configs, counters, caches, and JSON). Under the hood, sets and dicts are <em>hash tables</em>: near-instant O(1) average lookup by hashing immutable keys. This chapter teaches each collection deeply — mechanics, methods, idioms, traps — then gives you the decision framework professionals use to choose between all four.</p>
+
+<h3>8.1 Tuples: immutable records with superpowers</h3>
+<p><strong>What.</strong> A <code>tuple</code> is an <em>ordered, immutable, heterogeneous sequence</em> — a list whose slots are frozen at birth. Literals use parens (optional!): <code>(1, 2)</code>, <code>1, 2</code> (same thing), <code>()</code> empty, <code>(5,)</code> one-tuple (the comma is mandatory). Hashable <em>iff all elements are hashable</em>; slightly smaller and faster than lists.</p>
+<p><strong>Why tuples exist (four jobs).</strong> (1) <strong>Fixed records</strong> — coordinates, RGB, name+age pairs: the <em>shape is the meaning</em>, and immutability guarantees nobody reshapes it. (2) <strong>Dict keys / set members</strong> — <code>{(0,0): "start"}</code> (lists can't — unhashable). (3) <strong>Safe multi-returns</strong> — <code>return (quotient, remainder)</code> / <code>divmod</code>. (4) <strong>Unpacking/swapping</strong> — <code>x, y = point</code>, <code>a, b = b, a</code> (the machinery runs on tuples).</p>
+<p><strong>Intuition.</strong> If a list is a <em>whiteboard list</em> (grows, shrinks, reorders), a tuple is an <em>engraved plaque</em>: made once, read forever. Functions return plaques ("here are your two results, exactly two, in this order") and dicts file plaques as labels.</p>
+<div class="code-block"><div class="code-head">tuples: creation, unpacking, star, swap, keys <button class="copy-btn">Copy</button></div><pre><code>point = (10, 20)       # parens optional: point = 10, 20 (same object!)
+one = (5,)             # trailing comma REQUIRED — (5) is just int 5
+empty = ()
+print(point, one, empty, type((5)))
+x, y = point           # UNPACK: bind each slot (count must match!)
+a, b = 1, 2
+a, b = b, a            # swap: right packs to (2,1) FIRST, then unpacks → 2 1
+first, *rest = (1, 2, 3, 4)   # starred: first=1, rest=[2,3,4] (a LIST!)
+*head, last = (1, 2, 3, 4)    # star anywhere: head=[1,2,3], last=4
+print(x, y, a, b, first, rest, head, last)
+grid = {(0, 0): "start", (2, 3): "goal"}  # tuples as keys (lists CAN'T)
+print(grid[(2, 3)])
+print((1, 2) + (3,), (1, 2) * 2)  # concat/repeat BUILD NEW tuples (immutable!)</code></pre><div class="out">(10, 20) (5,) () &lt;class 'int'&gt;
+10 20 2 1 1 [2, 3, 4] [1, 2, 3] 4
+goal
+(1, 2, 3) (1, 2, 1, 2)</div></div>
+<p><strong>Step-by-step (the swap).</strong> <code>a, b = b, a</code>: the right side <em>packs</em> current values into a temporary tuple <code>(2, 1)</code> <em>before any binding happens</em>; then the left side <em>unpacks</em> positionally: <code>a → 2</code>, <code>b → 1</code>. No temp variable, no data loss — atomic by construction. The starred target (<code>*rest</code>) always collects into a <em>list</em> (mutable, since length varies) — even when unpacking a tuple.</p>
+<p><strong>More examples — records, returns, iteration:</strong></p>
+<div class="code-block"><div class="code-head">tuples as records + named access preview <button class="copy-btn">Copy</button></div><pre><code>users = [("Ali", 30, "Lahore"), ("Zara", 25, "Karachi")]
+for name, age, city in users:   # unpack IN the loop — self-documenting
+    print(f"{name} ({age}) from {city}")
+def stats(xs):
+    return min(xs), max(xs), sum(xs)/len(xs)  # return ONE tuple of three
+lo, hi, avg = stats([4, 1, 9])
+print(lo, hi, avg)
+# Tuple methods: only TWO exist (immutables need no mutators!)
+t = (1, 2, 2, 3)
+print(t.count(2), t.index(3))  # 2 3
+# Many plaques → upgrade to NAMED records (readability):
+from collections import namedtuple
+User = namedtuple("User", ["name", "age"])
+u = User("Ali", 30)
+print(u, u.name, u[1])  # User(name='Ali', age=30) Ali 30 — tuple + attribute access!</code></pre><div class="out">Ali (30) from Lahore
+Zara (25) from Karachi
+1 9 4.666666666666667
+2 3
+User(name='Ali', age=30) Ali 30</div></div>
+<div class="callout warn"><strong class="t">⚠️ The shallowness loophole (from §3.3)</strong><code>t = ([1], [2])</code>: the tuple's <em>arrows</em> are frozen (<code>t[0] = x</code> → TypeError) but the <em>pointed-to lists</em> are mutable (<code>t[0].append(99)</code> works!). True immutability needs immutable elements. Such tuples are also <em>unhashable</em> (<code>hash(t)</code> → TypeError) — so they can't be dict keys. Rule: hashable ⟺ deeply immutable (for builtins).</div>
+<div class="callout info"><strong class="t">💡 Tuple vs list — the real rule</strong>Heterogeneous + fixed shape → tuple (<code>("Ali", 30)</code> — position <em>means</em> something). Homogeneous + variable length → list (<code>[88, 92, 75]</code> — all "scores"). When a tuple record grows past ~3 fields or gets passed around, graduate to <code>namedtuple</code> (above) or a <code>@dataclass</code> (Chapter 18) — named fields beat <code>user[2]</code> everywhere.</div>
+
+<h3>8.2 Sets: uniqueness, membership, and group mathematics</h3>
+<p><strong>What.</strong> A <code>set</code> is an <em>unordered, mutable collection of unique, hashable elements</em>. Literals use braces: <code>{1, 2, 3}</code>; empty set is <code>set()</code> (<code>{}</code> is a dict!). Backed by a hash table: membership/add/remove average O(1). Elements must be immutable (hashable) — no lists/dicts inside.</p>
+<p><strong>Why sets exist (three jobs).</strong> (1) <strong>Deduplication</strong> — <code>set(messy_list)</code> collapses repeats. (2) <strong>Fast membership</strong> — <code>x in big_set</code> is O(1) vs O(n) list scan (§5.6's 1000× proof). (3) <strong>Group math</strong> — union/intersection/difference/symmetric-difference as operators (<code>| &amp; - ^</code>) and methods — answering "in both?", "only in A?", "in exactly one?" directly.</p>
+<p><strong>Intuition.</strong> A set is a <em>bouncer with a perfect guest list</em>: no duplicates get in, entry checks are instant (hash the name, check the bucket), and comparing two parties' lists (who's at both? who only made one?) is the whole job. Order? The bouncer doesn't do order — sets are <em>unordered</em> (iteration order is arbitrary and version-dependent; never rely on it).</p>
+<div class="code-block"><div class="code-head">set operations: the complete map <button class="copy-btn">Copy</button></div><pre><code>ds = {"Ali", "Zara", "Omar"}
+ml = {"Zara", "Hina", "Omar", "Daniyal"}
+print(sorted(ds | ml))   # UNION: everyone
+print(sorted(ds &amp; ml))   # INTERSECTION: in both → Zara, Omar
+print(sorted(ds - ml))   # DIFFERENCE: only in ds → Ali
+print(sorted(ds ^ ml))   # SYMMETRIC DIFF: in exactly one
+print({"a"} &lt; {"a", "b"}, {"a"} &lt;= {"a"})  # proper subset / subset
+print(ds.isdisjoint({"X"}))  # True — no overlap at all
+# Mutating methods (in-place, return None — §7.3's rule!):
+ds.add("Hina"); ds.discard("Ghost")   # discard: no error if absent (vs remove()!)
+ds.update(["X", "Y"])                 # add many
+print(sorted(ds))
+# Dedup that PRESERVES order (sets don't!) — the pro idiom:
+items = ["b", "a", "b", "c", "a"]
+print(list(dict.fromkeys(items)))  # ['b', 'a', 'c']</code></pre><div class="out">['Ali', 'Daniyal', 'Hina', 'Omar', 'Zara']
+['Omar', 'Zara']
+['Ali']
+['Ali', 'Daniyal', 'Hina']
+True True
+True
+['Ali', 'Hina', 'Omar', 'X', 'Y', 'Zara']
+['b', 'a', 'c']</div></div>
+<div class="diagram"><strong>Figure 8.1 — Venn intuition (A={1,2,3}, B={3,4})</strong><div class="mem"><div class="membox"><b>A − B</b>1, 2<br><em>only left</em></div><div class="membox"><b>A ∩ B</b>3<br><em>both</em></div><div class="membox"><b>B − A</b>4<br><em>only right</em></div><div class="membox"><b>A △ B</b>1, 2, 4<br><em>exactly one</em></div></div><div style="font-size:.85rem">A∪B = {1,2,3,4} · operators: <code>| &amp; - ^</code> · methods: <code>union/intersection/difference/symmetric_difference</code> (methods accept ANY iterable; operators need sets)</div></div>
+<p><strong>Step-by-step (why <code>dict.fromkeys</code> dedups in order).</strong> <code>dict.fromkeys(items)</code> builds <code>{"b": None, "a": None, "c": None}</code> — dicts <em>ignore duplicate keys</em> (keeping first-insertion position) and <em>preserve insertion order</em> (guaranteed 3.7+). <code>list(…)</code> takes the keys → <code>['b','a','c']</code>. O(n), order-stable — strictly better than <code>list(set(items))</code> whenever order matters (which is usually).</p>
+<div class="code-block"><div class="code-head">sets in data jobs: overlap, coverage, invalid detection <button class="copy-btn">Copy</button></div><pre><code>required = {"name", "age", "email"}
+row = {"name": "Ali", "age": 30}
+missing = required - row.keys()      # keys-view supports set ops!
+print("missing:", missing)           # {'email'}
+valid_cities = {"Lahore", "Karachi", "Islamabad"}
+seen = {"Lahore", "Paris", "Karachi"}
+print("invalid:", seen - valid_cities)  # {'Paris'} — instant data validation
+print("coverage:", sorted(seen &amp; valid_cities))  # sorted: set ORDER varies per run!
+# frozenset: the IMMUTABLE (hashable!) set — for set-valued dict keys / constants:
+fs = frozenset([1, 2, 2])
+print(fs, hash(fs) is not None)  # frozenset({1, 2}) True</code></pre><div class="out">missing: {'email'}
+invalid: {'Paris'}
+coverage: ['Karachi', 'Lahore']
+frozenset({1, 2}) True</div></div>
+<div class="callout warn"><strong class="t">⚠️ Set traps</strong>Iteration order is arbitrary (never index/assume — sort first for stable output) · <code>{}</code> is a dict; <code>set()</code> is empty set · elements must be hashable (<code>{[1]}</code> → TypeError) · <code>remove(x)</code> raises if absent (use <code>discard</code> for "ensure absent") · mutating methods return None (<code>s = s.add(x)</code> → None disaster, same as <code>sort</code>).</div>
+
+<h3>8.3 Dictionaries: the king of data structures</h3>
+<p><strong>What.</strong> A <code>dict</code> maps <em>hashable keys</em> to <em>arbitrary values</em>: <code>{"name": "Ali", "age": 30}</code>. Mutable, insertion-ordered (guaranteed 3.7+), average O(1) get/set/delete via hashing. Keys: almost always <code>str</code>/<code>int</code>/tuple (hashable immutables). Values: anything, including nested dicts/lists.</p>
+<p><strong>Why dicts exist (five jobs).</strong> (1) <strong>Records</strong> — <code>user["name"]</code> beats <code>user[0]</code> (labels beat positions). (2) <strong>Lookups/mappings</strong> — id→name, code→price. (3) <strong>Counters/histograms</strong> — word→count (or <code>Counter</code>). (4) <strong>Caches/memo tables</strong> — args→result (<code>lru_cache</code> automates this, Ch. 20). (5) <strong>JSON-shaped data</strong> — APIs, configs, documents (Chapter 15: JSON ↔ dict is nearly 1:1).</p>
+<p><strong>Intuition: hashing in 60 seconds.</strong> <code>hash("name")</code> scrambles the key into a huge integer; modulo table-size picks a <em>bucket</em>; the entry lives there. Lookup re-hashes and jumps straight to the bucket — no scanning. That's the O(1): <em>compute where it must be, instead of searching</em>. Collisions (two keys, one bucket) are resolved internally (open addressing in CPython) — you never see them, except as the reason worst-case is O(n) but average-case O(1). And now the key rule is obvious: <em>if a key mutated after insertion, its hash would point to the wrong bucket</em> — hence keys must be immutable.</p>
+<div class="code-block"><div class="code-head">dict essentials: access, defaults, merge, remove, views <button class="copy-btn">Copy</button></div><pre><code>user = {"name": "Ali", "age": 30}
+print(user["name"])               # direct — KeyError if missing (loud = good sometimes)
+print(user.get("city"))           # None — safe probe (never raises)
+print(user.get("city", "Lahore")) # default when missing (NOT stored)
+user["city"] = "Lahore"           # add / overwrite (same syntax!)
+user.setdefault("tags", []).append("vip")  # get-or-CREATE, then use — atomic idiom
+print(user)
+user.update({"age": 31, "vip": True})  # bulk merge (overwrites age, adds vip)
+print(user.pop("vip"))            # remove AND return → True
+print(user.pop("ghost", None))    # safe pop with default (no KeyError)
+del user["city"]                  # remove (KeyError if missing)
+# VIEWS: live windows, not copies — reflect later changes, support set ops on keys:
+print(user.keys(), user.values(), user.items())
+user["new"] = 1
+print(user.keys())  # dict_keys([...,'new']) — the view UPDATED (it's live!)</code></pre><div class="out">Ali
+None
+Lahore
+{'name': 'Ali', 'age': 30, 'city': 'Lahore', 'tags': ['vip']}
+True
+None
+dict_keys(['name', 'age', 'tags']) dict_values(['Ali', 31, ['vip']]) dict_items([('name', 'Ali'), ('age', 31), ('tags', ['vip'])])
+dict_keys(['name', 'age', 'tags', 'new'])</div></div>
+<p><strong>Step-by-step (<code>setdefault</code>).</strong> <code>user.setdefault("tags", [])</code>: key missing → <em>store</em> the default <code>[]</code> under <code>"tags"</code> <em>and return it</em>; the <code>.append("vip")</code> then mutates that stored list. One lookup, atomic, no <code>if "tags" not in user</code> dance. Contrast <code>.get(k, [])</code> + append: appends to a <em>temporary</em> that's discarded — the classic "my append vanished" bug. (For grouping/counters at scale: <code>collections.defaultdict</code> / <code>Counter</code> below.)</p>
+<div class="code-block"><div class="code-head">iteration patterns + nested dicts + comprehensions <button class="copy-btn">Copy</button></div><pre><code>prices = {"pen": 2.5, "book": 12.0, "bag": 30.0}
+for k in prices:                  # keys (default)
+    print(k, end=" ")
+print()
+for k, v in prices.items():       # key+value — THE standard loop
+    print(f"{k} → {v}")
+for v in prices.values():         # values only
+    print(v, end=" ")
+print()
+# Nested: drill with chained [k], guard with .get chains:
+students = {"s01": {"name": "Ali", "scores": [88, 92]},
+            "s02": {"name": "Zara", "scores": [95, 90]}}
+print(students["s01"]["scores"][0])              # 88 — drill down
+print(students.get("s99", {}).get("name", "?"))  # ? — safe drill (no KeyError)
+avg = {sid: sum(r["scores"])/len(r["scores"]) for sid, r in students.items()}
+print(avg)  # {'s01': 90.0, 's02': 92.5} — dict comprehension (Ch. 13)
+inv = {v: k for k, v in {"a": 1, "b": 2}.items()}  # invert → {1:'a', 2:'b'}
+print(inv)</code></pre><div class="out">pen book bag 
+pen → 2.5
+book → 12.0
+bag → 30.0
+2.5 12.0 30.0 
+88
+?
+{'s01': 90.0, 's02': 92.5}
+{1: 'a', 2: 'b'}</div></div>
+<div class="code-block"><div class="code-head">counting + grouping: manual, then the stdlib upgrades <button class="copy-btn">Copy</button></div><pre><code>votes = ["a", "b", "a", "c", "a"]
+counts = {}                                   # manual counter (know the pattern!)
+for v in votes:
+    counts[v] = counts.get(v, 0) + 1
+print(counts)  # {'a': 3, 'b': 1, 'c': 1}
+from collections import Counter, defaultdict
+print(Counter(votes))           # Counter({'a': 3, 'b': 1, 'c': 1}) — + most_common!
+print(Counter(votes).most_common(2))  # [('a', 3), ('b', 1)]
+groups = defaultdict(list)      # missing key → auto-creates list()!
+for w in ["apple", "ant", "bear", "bee"]:
+    groups[w[0]].append(w)      # no setdefault needed
+print(dict(groups))  # {'a': ['apple', 'ant'], 'b': ['bear', 'bee']}
+# Merge (3.9+): | creates NEW, |= updates in place:
+print({"a": 1} | {"b": 2})      # {'a': 1, 'b': 2}</code></pre><div class="out">{'a': 3, 'b': 1, 'c': 1}
+Counter({'a': 3, 'b': 1, 'c': 1})
+[('a', 3), ('b', 1)]
+{'a': ['apple', 'ant'], 'b': ['bear', 'bee']}
+{'a': 1, 'b': 2}</div></div>
+<div class="callout bad"><strong class="t">🚫 Never resize a dict while iterating it</strong><code>for k in d: del d[k]</code> → <code>RuntimeError: dictionary changed size during iteration</code>. (Changing <em>values</em> of existing keys is fine; adding/removing keys is not.) Fixes: iterate <code>list(d.items())</code> snapshot, collect keys-then-delete, or build a new dict: <code>d = {k: v for k, v in d.items() if keep(k, v)}</code>.</div>
+<div class="callout warn"><strong class="t">⚠️ More dict traps</strong><code>d[k]</code> on missing → KeyError (choose deliberately: loud <code>[]</code> vs safe <code>.get</code> vs creating <code>.setdefault</code>) · <code>.get(k, []).append(x)</code> appends to garbage (use <code>setdefault</code>/<code>defaultdict</code>) · views are live (snapshot with <code>list()</code> before sorting/storing) · <code>update</code> returns None (same mutator rule) · inversion loses data on duplicate values (<code>{"a":1,"b":1}</code> → <code>{1:"b"}</code> — last wins silently!).</div>
+
+<h3>8.4 Hashing, equality contracts, and performance</h3>
+<p><strong>The contract (interview-grade).</strong> (1) Objects that compare <code>==</code> <strong>must</strong> have equal hashes (<code>hash(1) == hash(1.0) == hash(True)</code> — and indeed <code>{1, 1.0, True}</code> collapses to <code>{1}</code>!). (2) Hashes must be <em>stable for the object's lifetime as a key</em> — hence immutability. (3) Unequal objects <em>should</em> usually differ in hash (collisions only cost speed, never correctness).</p>
+<table><tr><th>Operation</th><th>list</th><th>tuple</th><th>set / dict</th></tr>
+<tr><td>Index/key access</td><td>O(1)</td><td>O(1)</td><td>O(1) average (hash)</td></tr>
+<tr><td>Search (<code>in</code>)</td><td>O(n) scan</td><td>O(n) scan</td><td>O(1) average (hash)</td></tr>
+<tr><td>Append/add/insert</td><td>O(1)* amortized</td><td>— (immutable)</td><td>O(1) average</td></tr>
+<tr><td>Delete by value/key</td><td>O(n)</td><td>—</td><td>O(1) average</td></tr>
+<tr><td>Memory per item</td><td>Low (dense array)</td><td>Lowest</td><td>Higher (sparse table + hashes)</td></tr></table>
+<p><strong>Debugging lens.</strong> "My key is right there but lookup fails!" → the key's <em>hash or equality</em> differs from what you think: hidden whitespace (<code>"Lahore "</code> vs <code>"Lahore"</code>), type mismatch (<code>1</code> vs <code>"1"</code> — note <code>1 == "1"</code> is False so hashes differ), float dust, or (custom classes) broken <code>__hash__/__eq__</code> (Chapter 18). Diagnose: <code>print(repr(key))</code> for both sides, compare <code>type()</code>s.</p>
+
+<h3>8.5 The definitive chooser (+ when to graduate beyond builtins)</h3>
+<table><tr><th>Need</th><th>Use</th><th>Why</th><th>Graduate to…</th></tr>
+<tr><td>Labels/keys, records, JSON, counters, caches</td><td><code>dict</code></td><td>O(1) lookup by key</td><td><code>dataclass</code> (fixed-schema records, Ch. 18) · Pandas (Part 2)</td></tr>
+<tr><td>Uniqueness, fast membership, group math</td><td><code>set</code></td><td>O(1) membership; <code>| &amp; - ^</code></td><td><code>Counter</code> (multisets) · DB <code>UNIQUE</code>/indexes</td></tr>
+<tr><td>Fixed record, safety, dict key, multi-return</td><td><code>tuple</code></td><td>Immutable = hashable + shape-guaranteed</td><td><code>namedtuple</code>/<code>dataclass</code> (named fields)</td></tr>
+<tr><td>Ordered + growing/shrinking/reordering</td><td><code>list</code></td><td>General sequence, rich methods</td><td><code>deque</code> (queues) · NumPy arrays (numeric scale)</td></tr></table>
+<div class="callout good"><strong class="t">✅ Data-Science connection</strong>JSON APIs deserialize to dicts; CSV rows become dicts (<code>csv.DictReader</code>, Ch. 15); group-by aggregates are dicts (<code>region → total</code>); feature vocabularies are dicts (<code>word → index</code>); label sets are sets; coordinates/shapes are tuples. Pandas <code>Series/DataFrame</code> are, conceptually, <em>dicts + arrays with superpowers</em> — every method there (<code>value_counts ≈ Counter</code>, <code>groupby ≈ defaultdict</code>) echoes this chapter.</div>
+
+<h3>8.6 Interview questions</h3>
+<details><summary>Q1: Why must dict keys be immutable/hashable? What breaks otherwise?</summary><div class="inner">Dicts hash keys to storage buckets. A key mutating after insertion would hash to a different bucket — lookups would miss an entry that's "right there", and the table would corrupt. Hence: immutable keys (str/int/tuple-of-immutables) with stable hashes. Demo: try <code>{[1]: "x"}</code> → TypeError: unhashable.</div></details>
+<details><summary>Q2: d[k] vs .get() vs .setdefault() vs defaultdict — when each?</summary><div class="inner"><code>d[k]</code>: missing is a bug — crash loudly (fail fast). <code>.get(k, default)</code>: missing is routine — probe without storing. <code>.setdefault</code>: get-or-create atomically (grouping into plain dicts). <code>defaultdict(factory)</code>: repeated get-or-create with a factory (cleaner grouping/counters at scale).</div></details>
+<details><summary>Q3: How do dicts achieve O(1) lookup? What's the worst case?</summary><div class="inner">Hash the key → bucket index → jump directly (open addressing in CPython). Average O(1); worst case O(n) under pathological hash collisions (all keys one bucket) — vanishingly rare with real hashes; CPython also randomizes string hashing (PYTHONHASHSEED) against collision attacks.</div></details>
+<details><summary>Q4: set vs list for membership testing — complexity and the crossover?</summary><div class="inner"><code>in</code> on list: O(n) scan. On set: O(1) hash. For repeated lookups, convert once (<code>set(big)</code>, O(n) build) then enjoy O(1) each — §5.6 measured ~2500× at n=200k. One-off single lookup on small data: list is fine (no build cost).</div></details>
+
+<h3>8.7 Exercises</h3>
+<div class="ex L1"><span class="pill">Level 1 · Understand</span><ol><li>Convert <code>[("a",1),("b",2)]</code> to a dict two ways (<code>dict()</code>, comprehension); convert back to a sorted key list. Explain each step.</li><li>On paper, Venn-sketch <code>| &amp; - ^</code> for <code>A={1,2,3,4}</code>, <code>B={3,4,5}</code>; verify in code (sort outputs for stable comparison).</li><li>Show three <code>setdefault</code> uses (grouping, counting-init, config-default) and rewrite one with <code>defaultdict</code>.</li></ol></div>
+<div class="ex L2"><span class="pill">Level 2 · Apply</span><ol><li>Group words by first letter with <code>setdefault</code>; then with <code>defaultdict</code>; then as a one-pass dict comprehension over <code>sorted(set(...))</code>. Compare readability.</li><li>Invert <code>{"a":1,"b":2,"c":1}</code> two ways: lossy (<code>{1:?...}</code> — which key survives and why?) and lossless (<code>{1: ["a","c"], 2: ["b"]}</code>).</li><li>Validate CSV-header coverage: <code>required - set(header)</code> for missing, <code>set(header) - required - optional</code> for unexpected. Report both.</li></ol></div>
+<div class="ex L3"><span class="pill">Level 3 · Interview</span><ol><li>First non-repeating character in O(n) (Counter + order pass), then all duplicates in O(n), then top-k frequent in O(n log k) (heapq) — three solutions, three complexity arguments.</li><li>Implement a tiny hash table (list of buckets + chaining) supporting <code>__setitem__/__getitem__</code>; demonstrate a collision and how chaining resolves it. (Demystifies dicts permanently.)</li></ol></div>
+<h3>8.8 Mini-challenge 🏆</h3>
+<div class="ex L2"><span class="pill">Challenge</span><p><strong>Build <code>vocab.py</code>.</strong> From a text file: build (1) word→index vocabulary (order of first appearance), (2) word→count Counter, (3) index→words inverted (lossless), (4) hapax legomena (words with count 1, as a set), (5) out-of-vocabulary checker for new sentences. Print sizes + samples. You've just built the preprocessing core of every bag-of-words / embedding pipeline — NLP's front door, in pure dicts and sets.</p></div>
+<div class="callout good"><strong class="t">🏁 Chapter summary → next</strong><strong>Remember:</strong> tuple = fixed record (unpack/star/swap; namedtuple past 3 fields) · set = unique + O(1) + Venn math (<code>dict.fromkeys</code> dedups in order) · dict = labeled O(1) via hashing (keys immutable; <code>[]</code> loud / <code>.get</code> safe / <code>.setdefault</code> create; views live; never resize during iteration) · equal ⟹ equal hash · graduate: dataclass/deque/Counter/NumPy. <strong>Next:</strong> Chapter 9 — conditional logic at full depth: branching, truthiness mastery, guard clauses, and match.</div>
+</div></section>

@@ -1,0 +1,114 @@
+<!-- CHAPTER 22 -->
+<section class="chapter" id="ch22">
+<div class="ch-head"><div class="ch-num">22</div><div><div class="kicker">Power patterns · craft</div><h2>Python Debugging</h2></div><div class="ch-tools"><button class="icon-btn bm" title="Bookmark">☆</button><button class="icon-btn done" title="Mark complete">✓</button><span class="chev">▾</span></div></div>
+<div class="ch-body">
+<p><strong>What/why.</strong> Debugging is not guessing, tweaking, or hoping — it is the <strong>scientific method applied to code</strong>: observe precisely, hypothesize explicitly, predict observably, test minimally, fix at the cause, verify + lock with a regression test. Seniors debug faster than juniors not by knowing more answers but by <strong>following a workflow instead of thrashing</strong> (random changes destroy evidence and breed new bugs). Memorize this chapter's loop; it scales from typos to distributed outages — only the instruments change.</p>
+<div class="diagram"><strong>Figure 22.1 — The professional debugging workflow (follow literally)</strong><div class="flow"><div class="fstep">1 · UNDERSTAND the error (read it FULLY — type + message + which line)</div><div class="farrow">↓</div><div class="fstep">2 · READ traceback bottom-up (WHAT last line → WHERE frames above)</div><div class="farrow">↓</div><div class="fstep">3 · LOCATE failure (which line? which value? print suspects!)</div><div class="farrow">↓</div><div class="fstep">4 · REPRODUCE minimally (smallest snippet that still breaks — bisect!)</div><div class="farrow">↓</div><div class="fstep">5 · INSPECT state (print/assert/pdb — assumptions vs reality)</div><div class="farrow">↓</div><div class="fstep">6 · TEST one hypothesis (single change → PREDICT → run → confirm/refute)</div><div class="farrow">↓</div><div class="fstep">7 · FIX at the cause (not the symptom!) → 8 · RETEST + REGRESSION TEST (lock it!)</div></div></div>
+
+<h3>22.1 Traceback mastery: anatomy + bottom-up protocol + chaining</h3>
+<div class="code-block"><div class="code-head">traceback anatomy, fully annotated <button class="copy-btn">Copy</button></div><pre><code>def mean(xs):
+    return sum(xs) / len(xs)     # line 2: the crash site (division)
+
+mean([])                         # line 4: the trigger (empty input)
+# Traceback (most recent call last):                 ← ① header: frames follow, oldest FIRST
+#   File "prog.py", line 4, in &lt;module&gt;               ← ② outer frame (read UP from bottom)
+#     mean([])                                       ← ③ its source line (the CALL)
+#   File "prog.py", line 2, in mean                   ← ④ inner frame (most recent = crash site)
+#     return sum(xs) / len(xs)                       ← ⑤ offending line (0/0!)
+# ZeroDivisionError: division by zero                ← ⑥ WHAT: read FIRST — type + reason</code></pre></div>
+<p><strong>Bottom-up protocol (exact).</strong> ① Read the <strong>last line</strong> fully: <em>exception type</em> (which rule broke?) + <em>message</em> (which values?). ② Move up to the <strong>innermost frame</strong> (last <code>File…</code> block): file + line number + function + echoed source. ③ Walk <strong>outward</strong> (up the frames): who called whom with what? — the <em>story</em> of how execution reached the crash. ④ Distinguish <strong>crash site</strong> (where it died — often innocent!) from <strong>fault site</strong> (where badness <em>originated</em> — empty list passed at line 4!). Beginners fix the crash site (wrap line 2 in try!) — professionals fix the fault (validate at line 4 / in mean's contract — §22.5).</p>
+<p><strong>Chained tracebacks ("During handling… caused by…").</strong> <code>raise New from old</code> (§14.3) prints <em>both</em> chains: read the <strong>bottom chain's last line</strong> (the final error), then the <strong>upper chain</strong> (the root cause). <code>During handling of X, another occurred</code> (implicit, no <code>from</code>) = error-inside-handler — the upper X is context, the lower is what killed you. Long chains in frameworks (10+ frames of library internals): scan for <strong>YOUR files</strong> (the outermost YOUR-frame = your trigger; innermost YOUR-frame = your last touch before library land).</p>
+
+<h3>22.2 Reproduce minimally: bisection + the minimal snippet</h3>
+<p><strong>What.</strong> <em>Bisection</em>: repeatedly halve the suspect (code, data, or time) while preserving the failure — 1M rows → 500k → … → 3 rows that still break. <em>Minimal repro</em>: the smallest self-contained snippet exhibiting the bug (ideally <10 lines, no files, no network). Why: tiny repros <em>isolate variables</em> (only one suspect left), run in milliseconds (fast hypothesis cycles), and are <em>shareable</em> (teammates/Stack Overflow/forums demand them — "minimal reproducible example").</p>
+<div class="code-block"><div class="code-head">bisection in action (data + code) <button class="copy-btn">Copy</button></div><pre><code># Symptom: pipeline dies on full data. Bisect the DATA:
+#   rows[:500_000] ✓ works → bug in second half → [:750_000] 💥 → [:625_000] ✓ ...
+#   → 3 guilty rows found in ~20 runs (log₂(1M) ≈ 20 — bisection is LOGARITHMIC!)
+# Then bisect the CODE: comment halves (§2.3's comment-out!) until 5 guilty lines remain.
+# Then FREEZE it as regression material (Ch. 23):
+def mean(xs):
+    if not xs:                                   # ← the FIX (fault site: contract!)
+        raise ValueError("mean of empty sequence")
+    return sum(xs) / len(xs)
+# Minimal repro preserved as a TEST (fails pre-fix, passes post-fix):
+assert mean([2, 4]) == 3.0
+try:
+    mean([])
+    raise AssertionError("should have raised!")
+except ValueError:
+    print("regression locked: empty → ValueError ✓")</code></pre><div class="out">regression locked: empty → ValueError ✓</div></div>
+<p><strong>Bisection discipline.</strong> Change <em>one variable per run</em> (halve data OR disable code — never both, or evidence confounds). Keep notes (run # : change → result). Stop at <em>understanding</em>, not just green ("it works now, dunno why" = bug relocated, not fixed — it <em>will</em> return). The minimal repro becomes the regression test (§22.5) — debugging output is a test asset, not trash.</p>
+
+<h3>22.3 Instruments I: print-probes + f-string debugging + asserts</h3>
+<div class="code-block"><div class="code-head">probe craft: labels, !r, =, and strategic placement <button class="copy-btn">Copy</button></div><pre><code>def pct(part, whole):
+    print(f"[pct] in: {part=!r}, {whole=!r}")   # ={ } self-documents; !r exposes whitespace/type!
+    result = 100 * part / whole
+    print(f"[pct] out: {result=}")
+    return result
+
+print(pct(3, 4))
+# Strategic placements: function ENTRY (args?) / BRANCH points (which path?) /
+# LOOP (first/last iterations? use `if i &lt; 3 or i &gt; n-3`) / BEFORE crash line (suspects!) /
+# INVARIANTS (assert, below — executable assumptions!)
+
+def withdraw(balance, amount):
+    assert balance &gt;= 0, f"balance {balance} already negative (caller bug!)"
+    assert amount &gt; 0, f"amount {amount} not positive"
+    assert amount &lt;= balance, f"overdraft: {amount} &gt; {balance}"
+    return balance - amount
+print(withdraw(100, 30))
+# withdraw(100, 500) → AssertionError: overdraft: 500 &gt; 100 (fault PINPOINTED, not downstream!)
+# RULE: assert INTERNAL invariants (your logic's promises); validate EXTERNAL input with if/raise (Ch. 14)!
+# (python -O STRIPS asserts — never rely on them for user-facing validation!)</code></pre><div class="out">[pct] in: part=3, whole=4
+[pct] out: result=75.0
+75.0
+70</div></div>
+<p><strong>Probe hygiene.</strong> Label every probe (<code>[fn]</code> prefix — grep-able!), print <code>!r</code> (hidden chars visible) + <code>type()</code> when types suspect, throttle loop probes (first/last N — million-line logs help nobody), and <em>remove or log-level them</em> after (stray probes pollute real output — Ch. 23's logging replaces them permanently).</p>
+
+<h3>22.4 Instruments II: pdb + breakpoint() + IDE debugging + post-mortem</h3>
+<div class="code-block"><div class="code-head">pdb: the 10 commands that cover 95% <button class="copy-btn">Copy</button></div><pre><code># Insert EXACTLY where confused (Python 3.7+):
+#   breakpoint()          # drops into pdb HERE (honors PYTHONBREAKPOINT=0 to disable globally!)
+# At the (Pdb) prompt:
+#   l / ll      list code around / LONG-list whole function (know where you are!)
+#   n           NEXT line (step OVER calls)
+#   s           STEP INTO the call (descend!)
+#   c           CONTINUE to next breakpoint / end
+#   r           RETURN from current function (run to its exit)
+#   p expr      PRINT any expression (full Python! call functions, slice, anything)
+#   pp expr     PRETTY-print (nested structures readable!)
+#   w           WHERE: stack trace (which frames? how deep?)
+#   u / d       UP / DOWN frames (inspect CALLERS' variables!)
+#   b line      BREAKpoint at line (b func, b file:line, conditional: b 12, x&gt;5)
+#   q           QUIT (abandon — careful: kills program!)
+# Post-mortem (inspect the CORPSE after a crash — no repro needed!):
+#   python -m pdb script.py  →  c  →  (crash)  →  w, u, p suspects...
+# IDE equivalent (VS Code/PyCharm): gutter-click breakpoint → F5 → hover vars,
+# WATCH panel (live exprs), CALL STACK pane (click frames!), STEP OVER/INTO buttons.</code></pre></div>
+<p><strong>When pdb beats probes.</strong> Deep stacks (inspect 5 frames up — probes can't), loops (conditional breakpoints beat 10k prints), unknown unknowns ("WHAT is this variable?!" — <code>p type(x), x</code> answers instantly), heisenbugs probes perturb (timing-sensitive — though logging perturbs less than prints). When probes beat pdb: quick single-value checks, production-attached processes (can't interrupt), async/multi-threaded flows (pdb serializes confusingly — log instead). Professionals use both daily.</p>
+<div class="callout info"><strong class="t">💡 Rubber-duck debugging (the zero-tech instrument)</strong>Explain your code <em>line by line, aloud</em> (to a duck, a teammate, or the air) — stating what each line <em>actually does</em> (not what you intended). Half of all bugs confess mid-sentence ("…and then i increments — wait, NO, continue SKIPS the increment!"). Do this <em>before</em> escalating to tools or teammates — it's the highest-ROI minute in debugging.</div>
+
+<h3>22.5 Fix at the cause + the strategy table + regression habit</h3>
+<p><strong>Cause vs symptom (the senior distinction).</strong> Symptom fix: wrap the crash line in try/except (crash gone, corruption continues — the empty-mean now silently returns None and poisons downstream stats!). Cause fix: enforce the contract at the fault site (<code>mean</code> raises on empty; caller validates input upstream). Tests: would the fix survive <em>different</em> triggers of the same fault? does it make the bug <em>impossible</em> (validation/types) or merely <em>silent</em>? Symptom fixes multiply; cause fixes divide.</p>
+<table><tr><th>Symptom</th><th>First move</th><th>Usual cause → fix site</th></tr>
+<tr><td>Exception + traceback</td><td>Bottom-up read (§22.1); minimal repro</td><td>Bad value/type at named line → validate at source</td></tr>
+<tr><td>Wrong result, no error</td><td>Assert intermediates; bisect probes</td><td>Logic/off-by-one/aliasing → the wrong line, + test</td></tr>
+<tr><td>Works once, fails later</td><td>Diff states (mutation? globals? exhausted gen?)</td><td>Shared mutable / single-use iterator → copy/factory</td></tr>
+<tr><td>Only on big data</td><td>Shrink (bisect rows); profile memory</td><td>O(n²)/materialization/leak → stream (Ch. 19/24)</td></tr>
+<tr><td>Only on their machine</td><td>Compare exe + versions (§17.5)</td><td>Wrong venv / drifted pins → freeze + recreate</td></tr>
+<tr><td>Flaky / intermittent</td><td>Seed randomness; log orderings</td><td>Set/dict-order assumptions, races, time — make deterministic</td></tr>
+<tr><td>Slow (not wrong)</td><td>Profile (Ch. 24!) — never guess</td><td>Hotspot ≠ hunch 90% of the time → measure first</td></tr></table>
+<div class="callout good"><strong class="t">✅ The regression habit (debugging's deliverable)</strong>Every fixed bug earns a <em>regression test</em> (Ch. 23) that FAILS on old code and PASSES on new — run it against both to prove it. Bugs recur (refactors resurrect them); tests remember. A fix without a test is a rumor. File the minimal repro AS the test — §22.2's pattern, every time.</div>
+
+<h3>22.6 Interview questions</h3>
+<details><summary>Q1: Walk me through your debugging workflow on a production traceback.</summary><div class="inner">Recite §22.0's loop with a real example: read last line (type+message) → innermost frame (crash site) → outward frames (trigger story) → separate crash site from fault site → minimal repro (bisect data/code) → probes/pdb single-hypothesis tests → fix at cause (contract/validation, not symptom-suppression) → retest + regression test. Mention rubber-ducking and one-change-per-run discipline.</div></details>
+<details><summary>Q2: pdb vs print-debugging — when each? Name the key pdb commands.</summary><div class="inner">pdb: deep stacks (u/d frames), loops (conditional b), unknowns (p anything), post-mortem (<code>python -m pdb</code>). Probes: quick checks, uninterruptible processes, async flows (log instead). Commands: l(ist), n(ext), s(tep), c(ontinue), p/p(p), w(here), u/d, b(reak), q(uit). IDE: same power visual (watch/call-stack/hover).</div></details>
+<details><summary>Q3: Cause vs symptom fix — with an example of each for the same bug.</summary><div class="inner">Bug: <code>mean([])</code> ZeroDivisionError. Symptom fix: try/except around the division returning None — crash gone, but silent None corrupts downstream stats (and every caller must None-check). Cause fix: <code>mean</code> raises ValueError on empty (contract!) + caller validates upstream — impossible states unrepresentable, fault localized, regression-tested. Test: does the fix survive other triggers of the same fault?</div></details>
+
+<h3>22.7 Exercises</h3>
+<div class="ex L1"><span class="pill">Level 1 · Understand</span><ol><li>Take 3 old tracebacks; annotate every frame (file/line/fn) + the bottom line in plain words; mark crash site vs fault site for each.</li><li>Add 5 asserts to a past function (entry/branch/exit invariants); trigger 2 deliberately; note how assertion messages beat raw tracebacks.</li><li>Solve one bug using ONLY <code>breakpoint()</code> + <code>n/p/w/u</code> (no probes). Journal each command + what it revealed.</li></ol></div>
+<div class="ex L2"><span class="pill">Level 2 · Apply</span><ol><li>Debug blind (full workflow + journal): <code>avg(xs) = sum/len</code> called with <code>[]</code>, <code>["3"]</code>, a generator, <code>None</code>. Deliver: repros, fault analysis, cause-fix, regression tests.</li><li>Bisect a 10k-row CSV with one poison row to the exact row in ≤14 runs (log₂); automate the bisection loop.</li><li>Post-mortem drill: crash a 3-level script under <code>python -m pdb</code>; navigate to the outermost YOUR-frame; inspect + explain without re-running.</li></ol></div>
+<div class="ex L3"><span class="pill">Level 3 · Interview</span><ol><li>"Passes on 1k rows, OOMs on 10M": full diagnosis plan (which stage grows? list vs gen? tracemalloc evidence?) + streaming fix + before/after peak-RSS numbers.</li><li>"Flaky test, fails 1 in 20": determinism audit (seeds? set-order? time? tmp collisions?) → reproduce reliably → fix → prove 200 green runs.</li></ol></div>
+<h3>22.8 Mini-challenge 🏆</h3>
+<div class="ex L2"><span class="pill">Challenge</span><p><strong>Run <code>bug_hunt.py</code>.</strong> Take (or write) a 60-line data script with FIVE planted bugs (one per strategy-table row: exception, logic, stateful, scale-only-via-size-param, order-assumption). Debug each with a written journal (workflow step → evidence → hypothesis → test → fix → regression test). Deliverable: the journal + 5 tests. Debugging is a <em>written</em> discipline — the journal is the skill.</p></div>
+<div class="callout good"><strong class="t">🏁 Chapter summary → next</strong><strong>Remember:</strong> 8-step workflow (understand → bottom-up → locate → repro-minimal → inspect → one-hypothesis → cause-fix → regression-test) · crash site ≠ fault site (fix the fault!) · bisect data+code (logarithmic!) · probes labeled + <code>!r</code>/<code>=</code>; asserts for internals, raises for boundaries · pdb (<code>breakpoint</code>, n/s/c/p/w/u/b, post-mortem) + rubber-duck first · strategy table per symptom · every fix ships a regression test. <strong>Next:</strong> Chapter 23 — writing professional Python at full depth: style, naming, logging, config, and testing.</div>
+</div></section>

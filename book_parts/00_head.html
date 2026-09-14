@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deep Data Science &amp; AI — Part 1: Python for Data Science</title>
+<meta name="description" content="Part 1 of Deep Data Science & AI: Python for Data Science — From Absolute Beginner to Professional. A complete textbook.">
+<style>
+:root{
+--bg:#ffffff;--bg2:#f6f8fb;--bg3:#eef2f7;--text:#1a2332;--muted:#5b6b82;--border:#dde5ef;
+--accent:#1a56db;--accent2:#0e9f6e;--accent3:#c81e1e;--accent4:#8b5cf6;--warn:#c27803;--code-bg:#0f172a;
+--code-fg:#e2e8f0;--card:#ffffff;--toc-bg:#f8fafc;--shadow:0 4px 24px rgba(15,40,80,.10);
+--radius:12px;--max:960px;--font:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+--mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+}
+html[data-theme="dark"]{
+--bg:#0b1220;--bg2:#111a2e;--bg3:#1a2540;--text:#e8eef6;--muted:#9fb0c7;--border:#26334d;
+--accent:#5b8cff;--accent2:#31c48d;--accent3:#f98080;--accent4:#b79cff;--warn:#e3a008;--code-bg:#060b16;
+--code-fg:#dbe7ff;--card:#101a30;--toc-bg:#0e1628;--shadow:0 4px 24px rgba(0,0,0,.5);
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;font-family:var(--font);background:var(--bg);color:var(--text);line-height:1.75;font-size:16.5px;-webkit-font-smoothing:antialiased}
+a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
+/* progress bar */
+#progress-wrap{position:fixed;top:0;left:0;right:0;height:5px;background:var(--bg3);z-index:200}
+#progress-bar{height:100%;width:0;background:linear-gradient(90deg,var(--accent),var(--accent2));transition:width .2s}
+/* header */
+.topbar{position:sticky;top:5px;z-index:100;background:var(--bg);border-bottom:1px solid var(--border);backdrop-filter:blur(8px)}
+.topbar-inner{max-width:1200px;margin:0 auto;padding:.6rem 1rem;display:flex;gap:.6rem;align-items:center;flex-wrap:wrap}
+.brand{font-weight:800;font-size:.95rem;letter-spacing:.2px}
+.brand small{display:block;font-weight:500;color:var(--muted);font-size:.72rem}
+.searchbox{flex:1;min-width:180px;position:relative}
+.searchbox input{width:100%;padding:.55rem .8rem .55rem 2.3rem;border:1px solid var(--border);border-radius:999px;background:var(--bg2);color:var(--text);font-size:.9rem}
+.searchbox span{position:absolute;left:.8rem;top:50%;transform:translateY(-50%);opacity:.6}
+.btn{border:1px solid var(--border);background:var(--bg2);color:var(--text);border-radius:999px;padding:.45rem .9rem;font-size:.82rem;cursor:pointer;font-weight:600;white-space:nowrap}
+.btn:hover{border-color:var(--accent);color:var(--accent)}
+.btn.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+#searchResults{position:absolute;top:110%;left:0;right:0;background:var(--card);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow);max-height:320px;overflow:auto;display:none;z-index:150}
+#searchResults a{display:block;padding:.55rem .9rem;border-bottom:1px solid var(--border);font-size:.85rem;color:var(--text)}
+#searchResults a:hover{background:var(--bg3);text-decoration:none}
+#searchResults mark{background:#fef08a;color:#111;border-radius:3px;padding:0 2px}
+.layout{max-width:1200px;margin:0 auto;display:grid;grid-template-columns:290px 1fr;gap:1.2rem;padding:1rem}
+@media(max-width:900px){.layout{grid-template-columns:1fr}}
+/* TOC */
+.toc{background:var(--toc-bg);border:1px solid var(--border);border-radius:var(--radius);padding:1rem;position:sticky;top:90px;max-height:calc(100vh - 110px);overflow:auto;font-size:.85rem;align-self:start}
+@media(max-width:900px){.toc{position:static;max-height:340px}}
+.toc h2{font-size:.8rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:.2rem 0 .6rem}
+.toc ol{margin:0;padding-left:1.1rem}
+.toc li{margin:.22rem 0}
+.toc a{color:var(--text)}
+.toc a:hover{color:var(--accent)}
+.toc .done-mark{color:var(--accent2);font-weight:800}
+.cover{background:linear-gradient(135deg,#0f2a6b,#1a56db 55%,#0e9f6e);color:#fff;border-radius:16px;padding:2.2rem 1.6rem;margin-bottom:1.2rem;box-shadow:var(--shadow)}
+.cover .series{opacity:.85;font-size:.8rem;letter-spacing:.14em;text-transform:uppercase;font-weight:700}
+.cover h1{margin:.4rem 0;font-size:clamp(1.6rem,4.5vw,2.6rem);line-height:1.15}
+.cover .sub{font-size:clamp(1rem,2.6vw,1.2rem);opacity:.95;font-weight:500}
+.cover .meta{margin-top:1rem;display:flex;gap:.5rem;flex-wrap:wrap;font-size:.78rem}
+.cover .meta span{background:rgba(255,255,255,.18);padding:.3rem .7rem;border-radius:999px}
+.cover-grid{display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-top:1.2rem}
+@media(max-width:700px){.cover-grid{grid-template-columns:1fr}}
+.cover-card{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.25);border-radius:12px;padding:.9rem 1rem;font-size:.88rem}
+/* chapters */
+.chapter{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:1.1rem;overflow:hidden;box-shadow:var(--shadow)}
+.ch-head{display:flex;gap:.7rem;align-items:flex-start;padding:1rem 1.1rem;cursor:pointer;user-select:none;background:var(--bg2)}
+.ch-num{background:var(--accent);color:#fff;font-weight:800;border-radius:10px;min-width:46px;height:46px;display:flex;align-items:center;justify-content:center;font-size:1rem;flex-shrink:0}
+.ch-head h2{margin:0;font-size:1.12rem;line-height:1.35}
+.ch-head .kicker{font-size:.72rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:700}
+.ch-tools{margin-left:auto;display:flex;gap:.35rem;flex-shrink:0;align-items:center}
+.icon-btn{border:1px solid var(--border);background:var(--bg);color:var(--text);border-radius:8px;padding:.3rem .5rem;cursor:pointer;font-size:.8rem}
+.icon-btn.active{background:var(--accent2);color:#fff;border-color:var(--accent2)}
+.ch-body{display:none;padding:1.2rem 1.2rem 1.6rem;max-width:var(--max)}
+.chapter.open .ch-body{display:block}
+.chapter.open .chev{transform:rotate(180deg)}
+.chev{display:inline-block;transition:transform .2s}
+.ch-body h3{margin-top:1.8rem;border-bottom:2px solid var(--border);padding-bottom:.35rem;font-size:1.15rem}
+.ch-body h4{margin-top:1.3rem;color:var(--accent);font-size:1rem}
+.ch-body h5{margin:1rem 0 .4rem;font-size:.92rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+table{width:100%;border-collapse:collapse;margin:.8rem 0;font-size:.9rem;display:block;overflow-x:auto}
+thead{display:table-header-group}tbody{display:table-row-group}tr{display:table-row}th,td{display:table-cell}
+th,td{border:1px solid var(--border);padding:.5rem .65rem;text-align:left;vertical-align:top}
+th{background:var(--bg3)}
+code{font-family:var(--mono);font-size:.86em;background:var(--bg3);padding:.12em .4em;border-radius:6px;word-break:break-word}
+pre{margin:0;background:var(--code-bg);color:var(--code-fg);padding:1rem;border-radius:0 0 10px 10px;overflow-x:auto;font-family:var(--mono);font-size:.83rem;line-height:1.65}
+pre code{background:none;padding:0;color:inherit}
+.code-block{margin:.9rem 0;border:1px solid var(--border);border-radius:10px;overflow:hidden}
+.code-head{display:flex;align-items:center;gap:.5rem;background:#1b2440;color:#cbd5e1;font-size:.75rem;padding:.4rem .8rem;font-family:var(--mono)}
+html[data-theme="light"] .code-head{background:#16213c}
+.code-head .dot{width:10px;height:10px;border-radius:50%;display:inline-block}
+.copy-btn{margin-left:auto;background:rgba(255,255,255,.12);color:#fff;border:1px solid rgba(255,255,255,.25);border-radius:6px;padding:.2rem .6rem;cursor:pointer;font-size:.72rem;font-family:var(--font)}
+.copy-btn:hover{background:rgba(255,255,255,.25)}
+.out{background:var(--bg2);border-top:1px dashed var(--border);padding:.6rem .9rem;font-family:var(--mono);font-size:.8rem;white-space:pre-wrap;color:var(--text)}
+.out::before{content:"OUTPUT ▸ ";font-weight:800;color:var(--accent2);font-size:.72rem}
+.tok-k{color:#c792ea}.tok-s{color:#9ece6a}.tok-n{color:#ff9e64}.tok-c{color:#7a8aa6;font-style:italic}.tok-f{color:#82aaff}.tok-b{color:#7dcfff}
+.callout{border-left:5px solid var(--accent);background:var(--bg2);border-radius:0 10px 10px 0;padding:.8rem 1rem;margin:1rem 0;font-size:.93rem}
+.callout.warn{border-color:var(--warn)}.callout.good{border-color:var(--accent2)}.callout.bad{border-color:var(--accent3)}.callout.info{border-color:var(--accent4)}
+.callout strong.t{display:block;font-size:.75rem;text-transform:uppercase;letter-spacing:.06em;margin-bottom:.25rem}
+.diagram{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:1rem;margin:1rem 0;overflow-x:auto;text-align:center}
+.diagram svg{max-width:100%;height:auto}
+.flow{display:flex;flex-direction:column;gap:0;align-items:center;margin:.6rem auto;max-width:520px}
+.fstep{background:var(--card);border:2px solid var(--accent);border-radius:10px;padding:.5rem 1rem;font-size:.85rem;font-weight:600;width:100%;text-align:center}
+.farrow{font-size:1.2rem;color:var(--accent);line-height:1.2}
+.mem{display:flex;gap:.6rem;flex-wrap:wrap;justify-content:center;margin:.6rem 0}
+.membox{border:2px solid var(--accent4);border-radius:10px;padding:.5rem .7rem;min-width:130px;background:var(--card);font-family:var(--mono);font-size:.75rem;text-align:center}
+.membox b{display:block;font-family:var(--font);font-size:.72rem;color:var(--muted);text-transform:uppercase}
+details{border:1px solid var(--border);border-radius:10px;margin:.6rem 0;background:var(--bg)}
+details summary{padding:.6rem .9rem;cursor:pointer;font-weight:700;font-size:.9rem}
+details .inner{padding:0 1rem 1rem;font-size:.93rem}
+.ex{border:1px solid var(--border);border-radius:10px;padding:.8rem 1rem;margin:.6rem 0;background:var(--bg)}
+.ex.L1{border-left:5px solid var(--accent2)}.ex.L2{border-left:5px solid var(--accent)}.ex.L3{border-left:5px solid var(--accent3)}
+.pill{display:inline-block;font-size:.7rem;font-weight:800;padding:.15rem .6rem;border-radius:999px;background:var(--bg3);color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-right:.4rem}
+ul.keypoints{list-style:none;padding:0}ul.keypoints li{padding:.35rem 0 .35rem 1.8rem;position:relative}
+ul.keypoints li::before{content:"✓";position:absolute;left:.4rem;color:var(--accent2);font-weight:800}
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:.8rem}
+@media(max-width:700px){.two-col{grid-template-columns:1fr}}
+.vs{display:grid;grid-template-columns:1fr 1fr;gap:.8rem;margin:.8rem 0}
+@media(max-width:700px){.vs{grid-template-columns:1fr}}
+.vs>div{border:1px solid var(--border);border-radius:10px;padding:.8rem}
+.vs .good{border-top:4px solid var(--accent2)}.vs .bad{border-top:4px solid var(--accent3)}
+footer.site{max-width:1200px;margin:0 auto;padding:2rem 1rem;color:var(--muted);font-size:.85rem}
+.footer-nav{display:flex;gap:.6rem;flex-wrap:wrap;margin-top:1rem}
+#bookmarksPanel{font-size:.82rem}
+#bookmarksPanel a{display:block;padding:.2rem 0}
+.toolbar-row{display:flex;gap:.5rem;flex-wrap:wrap;margin:.8rem 0}
+.kbd{font-family:var(--mono);background:var(--bg3);border:1px solid var(--border);border-bottom-width:2px;border-radius:6px;padding:.1em .45em;font-size:.8em}
+/* print */
+@media print{
+.topbar,.toc,#progress-wrap,.ch-tools,.toolbar-row,.copy-btn,#searchResults,.footer-nav,.no-print{display:none!important}
+.layout{display:block}.chapter{break-inside:avoid;box-shadow:none}.ch-body{display:block!important}
+body{font-size:11pt;line-height:1.6;background:#fff;color:#000}.cover{color:#000;background:#eee!important;box-shadow:none}
+pre{white-space:pre-wrap}
+}
+</style>
+</head>
+<body>
+<div id="progress-wrap"><div id="progress-bar"></div></div>
+<header class="topbar">
+<div class="topbar-inner">
+<div class="brand">Deep Data Science &amp; AI<small>Part 1 · Python for Data Science</small></div>
+<div class="searchbox"><span>🔍</span><input id="searchInput" type="search" placeholder="Search the book… (e.g. decorator, LEGB, slicing)" autocomplete="off"><div id="searchResults"></div></div>
+<button class="btn" id="themeBtn" title="Toggle dark/light mode">🌙 Dark</button>
+<button class="btn" id="expandBtn">Expand all</button>
+<button class="btn primary" id="continueBtn">Continue ▸</button>
+</div>
+</header>
+<div class="layout">
+<nav class="toc" id="tocNav">
+<h2>📚 Contents <span id="pctLabel"></span></h2>
+<div class="toolbar-row"><button class="btn" id="resetBtn">Reset progress</button></div>
+<ol id="tocList"></ol>
+<h2 style="margin-top:1rem">🔖 Bookmarks</h2>
+<div id="bookmarksPanel"><em style="color:var(--muted)">No bookmarks yet. Click ☆ on any chapter.</em></div>
+<h2 style="margin-top:1rem">⌨️ Shortcuts</h2>
+<div style="font-size:.78rem;color:var(--muted)"><span class="kbd">/</span> focus search · <span class="kbd">t</span> theme · <span class="kbd">Esc</span> close search</div>
+</nav>
+<main id="mainCol">
+<div class="cover">
+<div class="series">Series: Deep Data Science &amp; AI — A Complete Professional Reference</div>
+<h1>Python for Data Science: From Absolute Beginner to Professional</h1>
+<div class="sub">A Deep, Practical and Visual Foundation for Data Science, Machine Learning and AI</div>
+<div class="meta"><span>📖 Part 1 of the series</span><span>25 chapters</span><span>5 projects + capstone</span><span>Interview prep</span><span>Exercises + answers</span></div>
+<div class="cover-grid">
+<div class="cover-card"><strong>How to use this book.</strong> Read chapters in order the first time — every chapter builds on the previous one. Type every code example yourself, predict the output before you run it, and do the Level 1–3 exercises. Use search (<span class="kbd">/</span>) as a reference afterwards.</div>
+<div class="cover-card"><strong>How depth is organized.</strong> Every major concept follows: What → Why → Intuition → Analogy → Visual → Syntax → Smallest example → Execution trace → More examples → Mistakes → Debugging → Best practices → Data-Science link → Interview Qs → Exercises → Summary → Next link.</div>
+</div>
+</div>
+<div class="toolbar-row no-print">
+<button class="btn" id="collapseBtn">Collapse all</button>
+<span style="font-size:.82rem;color:var(--muted)" id="statLine"></span>
+</div>

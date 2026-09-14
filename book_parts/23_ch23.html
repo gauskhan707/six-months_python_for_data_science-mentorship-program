@@ -1,0 +1,158 @@
+<!-- CHAPTER 23 -->
+<section class="chapter" id="ch23">
+<div class="ch-head"><div class="ch-num">23</div><div><div class="kicker">Craft</div><h2>Writing Professional Python</h2></div><div class="ch-tools"><button class="icon-btn bm" title="Bookmark">☆</button><button class="icon-btn done" title="Mark complete">✓</button><span class="chev">▾</span></div></div>
+<div class="ch-body">
+<p><strong>What/why.</strong> Code is <em>read 10× more than written</em> — by future-you (who forgot everything), teammates, reviewers, and interviewers. "Working" is the <em>minimum</em>; professional means <strong>readable</strong> (PEP 8, names, small functions — readable code gets fixed faster and breaks less), <strong>reliable</strong> (tested, logged, configured — failures are caught early and diagnosed fast), and <strong>reusable</strong> (DRY, modular, documented — the second use costs ~zero). This chapter turns working scripts into maintainable software: style automation, naming, function craft, logging, configuration, type-checking, and pytest testing — with the economics of <em>why each practice pays</em>.</p>
+
+<h3>23.1 PEP 8 + automation: style without arguments</h3>
+<p><strong>What.</strong> PEP 8 is Python's style guide (naming, spacing, line length, idioms). The professional move isn't memorizing it — it's <strong>automating</strong> it: <em>formatters</em> rewrite code (Black/Ruff-format: canonical layout, zero decisions) and <em>linters</em> flag problems (Ruff/Flake8: unused imports, shadowing, banned patterns, complexity). Run both on every save + in CI: style debates end forever, diffs stay minimal, reviews discuss <em>logic</em>.</p>
+<table><tr><th>Rule (essence)</th><th>Do</th><th>Don't</th><th>Enforced by</th></tr>
+<tr><td>Names</td><td><code>total_sales, mean_score()</code>, <code>MAX_N</code>, <code>DataLoader</code></td><td><code>x2, Tmp, doStuff()</code></td><td>Linter (N818 etc.) + review</td></tr>
+<tr><td>Lines ≤ 88–100</td><td>Break with parens (formatter does it)</td><td>200-char monsters, <code>\</code> continuations</td><td>Formatter</td></tr>
+<tr><td>Spacing</td><td><code>f(a, b)</code>, <code>x = 1</code>, 2 blank lines around top defs</td><td><code>f(a,b)</code>, <code>x=1</code>, walls of code</td><td>Formatter</td></tr>
+<tr><td>Idioms</td><td><code>if x is None</code>, <code>if items:</code>, <code>with open</code></td><td><code>== None</code>, <code>len(x)&gt;0</code>, bare <code>open</code></td><td>Linter (E711/E501…) + this book!</td></tr>
+<tr><td>Imports</td><td>Top, grouped stdlib→3rd→local, one per line</td><td>Mid-file, <code>import os,sys</code>, <code>*</code></td><td>Linter (isort rules)</td></tr>
+<tr><td>Complexity</td><td>Small fns, guards, ≤ ~10 branches/fn</td><td>50-line nested pyramids</td><td>Linter (C901) + review</td></tr></table>
+<div class="code-block"><div class="code-head">tooling: install once, run always <button class="copy-btn">Copy</button></div><pre><code># Install (dev tools live in the venv too!):
+#   pip install ruff pytest
+# Run (root of project):
+#   ruff check .          # lint: errors, smells, banned patterns
+#   ruff format .         # format: canonical layout (like Black, faster)
+#   ruff check --fix .    # auto-fix what's safe (unused imports, etc.)
+# Editor: format-on-save + lint-on-type (VS Code Ruff extension — 2 minutes setup)
+# CI gate: same commands must pass before merge (style enforced by robots, not humans)</code></pre></div>
+<div class="vs"><div class="bad"><strong>❌ Script smell (works, rots)</strong><br><code>def f(d):<br>&nbsp;&nbsp;x=[]<br>&nbsp;&nbsp;for r in d:<br>&nbsp;&nbsp;&nbsp;&nbsp;if r[2]&gt;0:<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;x.append((r[0],r[2]*1.2))<br>&nbsp;&nbsp;return x</code><br><em>Magic index 2, magic 1.2, meaningless names — every reader reverse-engineers it.</em></div><div class="good"><strong>✅ Professional (same logic, maintainable)</strong><br><code>TAX_MULT = 1.2<br>def taxed_items(rows):<br>&nbsp;&nbsp;"""Return (name, taxed_price) for rows with positive price."""<br>&nbsp;&nbsp;return [(r["name"], r["price"] * TAX_MULT)<br>&nbsp;&nbsp;&nbsp;&nbsp;for r in rows if r["price"] &gt; 0]</code><br><em>Named constant, named fields, docstring, one idea — readable in seconds.</em></div></div>
+
+<h3>23.2 Naming + function craft (the readability core)</h3>
+<p><strong>Naming economics.</strong> Names are read hundreds of times per write — <em>every extra second of name-decoding multiplies across readers × readings</em>. Rules: <em>full words</em> (<code>count</code> not <code>cnt</code> — except universal <code>i/n/df/ax</code>), <em>units in names</em> (<code>timeout_s, size_mb, price_cents</code> — prevents Mars-orbiter-class bugs!), <em>booleans as predicates</em> (<code>is_valid, has_rows, needs_retry</code>), <em>functions as verb+object</em> (<code>parse_date, total_revenue</code>), <em>collections plural</em> (<code>rows, users</code>), <em>no type-encoding</em> (<code>name_str</code> — hints do this!), <em>no lies</em> (<code>get_</code> must not mutate; <code>list</code> must be a list).</p>
+<p><strong>Function craft (from §11.9, enforced).</strong> One job (no "and") · ~5–20 lines · ≤3–4 params (bundle config!) · pure core, I/O shell · return values, print at edges · guards over nesting · no magic literals (name them!) · docstring + hints on anything shared. Plus: <strong>DRY with judgment</strong> — duplicate <em>twice</em>, abstract on the <em>third</em> (premature abstraction couples things that merely look alike — "rule of three"). And <strong>YAGNI</strong> (You Aren't Gonna Need It): no speculative generality — extension points earn their existence.</p>
+<div class="code-block"><div class="code-head">magic → named, nested → guarded (before/after) <button class="copy-btn">Copy</button></div><pre><code># BEFORE: magic + nesting (works; unreadable; untestable pieces)
+def proc(r):
+    if r:
+        if len(r) &lt; 10000:
+            t = 0
+            for x in r:
+                if x &gt; 0:
+                    t += x * 1.2
+            return t / len(r)
+    return 0
+
+# AFTER: named + guarded + decomposed (same math, professional)
+TAX_MULT = 1.2
+MAX_ROWS = 10_000
+
+def mean_taxed(values):
+    """Mean of positive values scaled by TAX_MULT (empty → 0.0)."""
+    if not values:
+        return 0.0
+    if len(values) &gt;= MAX_ROWS:
+        raise ValueError(f"{len(values)} rows exceeds {MAX_ROWS}")
+    taxed = [v * TAX_MULT for v in values if v &gt; 0]
+    return sum(taxed) / len(values)
+
+print(proc([10, -5, 20]), mean_taxed([10, -5, 20]))  # 12.0 12.0 — same answer, different futures</code></pre><div class="out">12.0 12.0</div></div>
+
+<h3>23.3 Logging: diagnostics that scale (never print in libraries)</h3>
+<p><strong>What/why.</strong> <code>logging</code> replaces prints with <em>leveled, named, routable, lazy</em> diagnostics: levels filter noise (DEBUG&lt;INFO&lt;WARNING&lt;ERROR&lt;CRITICAL), logger names locate sources (<code>sales.readers</code>), handlers route (console/file/syslog…), lazy <code>%s</code>-args skip formatting when disabled, and <code>exception()</code> attaches tracebacks in one call. Prints have <em>none</em> of this — and pollute stdout (which may be piped data!).</p>
+<div class="code-block"><div class="code-head">logging: setup once, log everywhere <button class="copy-btn">Copy</button></div><pre><code>import logging
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+log = logging.getLogger("sales")          # module logger (use __name__ in real modules!)
+
+rows_loaded = 1200
+log.debug("raw sample: %r", [1, 2])       # hidden at INFO (zero format cost — lazy %s!)
+log.info("loaded %d rows", rows_loaded)   # normal operations (no f-string — lazy!)
+log.warning("dropping %d bad rows", 37)   # concerning but handled
+try:
+    1 / 0
+except ZeroDivisionError:
+    log.exception("math failed")          # ERROR + FULL TRACEBACK, one call
+# Levels: DEBUG (diagnose) &lt; INFO (normal) &lt; WARNING (handled-bad) &lt; ERROR (failed op) &lt; CRITICAL (dying)
+# Libraries: NEVER basicConfig (app owns config!) — just getLogger(__name__) + NullHandler default.</code></pre><div class="out">... INFO sales: loaded 1200 rows
+... WARNING sales: dropping 37 bad rows
+... ERROR sales: math failed
+Traceback (most recent call last):
+  ...
+ZeroDivisionError: division by zero</div></div>
+<p><strong>Log craft.</strong> Log <em>decisions and boundaries</em> (loaded N, dropped M because…, retrying, using fallback X) — not every loop iteration (volume!). Include <em>counts + reasons + samples</em> (<code>dropping 37 rows (bad age); e.g. row 8812</code>). Errors log <em>once, at handling time</em> (with traceback) — re-logging up the chain spams. Secrets <em>never</em> (passwords/tokens/keys — neither values nor full URLs-with-credentials).</p>
+
+<h3>23.4 Configuration: no magic in code (args/env/files)</h3>
+<p><strong>What/why.</strong> Paths, thresholds, URLs, batch sizes, model names — anything that varies by run/machine/secret — must live <em>outside</em> code: <strong>CLI args</strong> (<code>argparse</code> — per-run knobs), <strong>environment variables</strong> (per-machine/secrets: <code>os.environ["API_KEY"]</code> — never in git!), <strong>config files</strong> (TOML/JSON/YAML — structured, reviewable, versioned). Hardcoding forces code edits for ops changes (risky), leaks secrets into git history (forever!), and blocks reuse across environments.</p>
+<div class="code-block"><div class="code-head">config layering: defaults &lt; file &lt; env &lt; CLI (precedence!) <button class="copy-btn">Copy</button></div><pre><code>import argparse, os
+
+def build_config(argv=None):
+    p = argparse.ArgumentParser(description="Analyze sales.")
+    p.add_argument("--input", default=os.environ.get("SALES_INPUT", "sales.csv"))
+    p.add_argument("--min-age", type=int, default=18)     # type-checked + documented free!
+    p.add_argument("--verbose", action="store_true")
+    args = p.parse_args(argv)
+    if args.min_age &lt; 0:                                # validate EARLY (fail fast, clear msg)
+        p.error("--min-age must be ≥ 0")
+    return args
+
+cfg = build_config(["--input", "q3.csv"])
+print(cfg.input, cfg.min_age, cfg.verbose)  # q3.csv 18 False
+# Secrets pattern: token = os.environ["API_KEY"]  (KeyError = loud missing-secret — GOOD!)
+# Never: API_KEY = "sk-..." in code (git history remembers FOREVER — rotate + purge if leaked!)</code></pre><div class="out">q3.csv 18 False</div></div>
+
+<h3>23.5 Type hints + mypy: static safety for dynamic code</h3>
+<div class="code-block"><div class="code-head">hints that pay rent (3.9+ builtin generics) <button class="copy-btn">Copy</button></div><pre><code>from __future__ import annotations  # (3.7–3.9 nicety; 3.10+ fine without for most)
+
+def mean(xs: list[float]) -&gt; float: ...
+def get_user(uid: int) -&gt; dict[str, object] | None: ...   # 3.10+ X | None (or Optional[X])
+
+# mypy (install: pip install mypy; run: mypy src/): finds WRONG-TYPE calls WITHOUT running:
+#   get_user("abc")  →  error: Argument 1 has incompatible type "str"; expected "int"
+# Adopt gradually: hint NEW code fully → `mypy --strict` on new modules → expand.
+# Hints are DOCS the IDE enforces (autocomplete, inline errors) + the reviewer reads.</code></pre></div>
+<p><strong>Hint economics.</strong> Cost: ~5% more keystrokes on signatures. Payoff: IDE catches wrong-arg bugs <em>while typing</em>, <code>mypy</code> catches cross-file type bugs <em>pre-commit</em>, signatures become <em>executable documentation</em> (types > prose for contracts). Skip hints only for throwaway 5-liners. (Runtime enforcement (<code>pydantic</code>, <code>beartype</code>) exists for boundaries that must <em>verify</em> — APIs, configs, plugins.)</p>
+
+<h3>23.6 Testing with pytest: prove it works (the reliability core)</h3>
+<p><strong>What/why.</strong> Tests are <em>executable specifications</em>: they prove behavior today and <em>guard</em> it forever (refactors/bugfixes verified in seconds, regressions caught at commit-time not customer-time). pytest: write plain <code>test_*.py</code> functions with <code>assert</code> — no boilerplate, great failure output, fixtures/parametrize for scale. <strong>What to test:</strong> pure functions exhaustively (happy + empty + edge + error paths — §11.1's testability argument!), I/O boundaries with tmp fixtures (<code>tmp_path</code>), regressions per fixed bug (§22.5). <strong>Coverage target:</strong> critical paths 100%, overall high — but <em>meaningful asserts</em> over percentage theater.</p>
+<div class="code-block"><div class="code-head">tests/test_analysis.py — the shape of good tests <button class="copy-btn">Copy</button></div><pre><code># tests/test_analysis.py  →  run: pytest -q  (add -x: stop at first fail, -v: verbose, -k: filter)
+import pytest
+
+def mean(xs):
+    if not xs:
+        raise ValueError("mean of empty")
+    return sum(xs) / len(xs)
+
+def test_mean_basic():                        # happy path
+    assert mean([1, 2, 3]) == 2.0
+
+@pytest.mark.parametrize("xs,expected", [    # MANY cases, one function (table-driven!)
+    ([5], 5.0), ([0, 0], 0.0), ([-2, 2], 0.0), ([0.1, 0.2], pytest.approx(0.15)),
+])
+def test_mean_cases(xs, expected):
+    assert mean(xs) == expected                # approx for FLOATS (§4.2 — never ==)!
+
+def test_mean_empty_raises():                 # error path (contract!)
+    with pytest.raises(ValueError, match="empty"):
+        mean([])
+
+def test_mean_does_not_mutate():              # purity/contract property
+    xs = [3, 1, 2]
+    mean(xs)
+    assert xs == [3, 1, 2]                    # input untouched (aliasing guard — Ch. 3!)</code></pre></div>
+<p><strong>Test craft.</strong> Name as specifications (<code>test_empty_raises_value_error</code>). One behavior per test (failures pinpoint!). Arrange-Act-Assert structure. Parametrize tables over copy-paste. <code>approx</code> for floats. <code>tmp_path</code> fixture for files (auto-cleaned). <code>monkeypatch</code> for env/time/randomness (deterministic!). Run on every save (watch) + every commit (CI gate) — unrun tests are fiction.</p>
+
+<h3>23.7 READMEs + review checklist (the professional surface)</h3>
+<div class="code-block"><div class="code-head">README skeleton (3 commands to green!) <button class="copy-btn">Copy</button></div><pre><code># sales-tool — one-line WHAT + WHY
+# Setup:  python -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt
+# Usage:  python -m sales_tool.cli profile data/sales.csv --min-age 18
+# Tests:  pytest -q  |  Lint: ruff check . && ruff format --check .
+# Layout: readers/ (I/O) → analysis/ (pure) → cli (shell)  +  decisions (WHY, not what)</code></pre></div>
+<p><strong>Self-review checklist (before every commit/PR).</strong> ☐ Formatted + linted? ☐ Names honest? ☐ Functions small/pure/guarded? ☐ No magic (constants/config)? ☐ No prints (logging)? ☐ Errors narrow + messaged? ☐ Hints on new signatures? ☐ Tests for new behavior (+ regressions)? ☐ README/decisions updated? ☐ No secrets? Run it literally for a month — then it's instinct.</p>
+
+<h3>23.8 Interview questions</h3>
+<details><summary>Q1: logging vs print — the full technical case?</summary><div class="inner">Levels (filterable verbosity), logger names (source location), handlers (console/file/syslog routing), lazy %-args (zero-cost-when-disabled), exception(traceback) in one call, thread-safety, and config-without-code-edits. Prints lack all six and pollute stdout (piped data!). Libraries must never configure logging (app owns it) — only emit via module loggers.</div></details>
+<details><summary>Q2: What makes code "clean" — beyond working? (Give the review checklist.)</summary><div class="inner">Readable (names/units/verbs, small fns, guards, no magic, formatted), reliable (tested incl. edges+errors, logged, configured, hinted), reusable (DRY-by-three, modular, documented decisions). Cite §23.7's checklist + economics (read-10×-written; tests pay at refactor-time; names multiply across readers).</div></details>
+<details><summary>Q3: How do you test data-analysis code? (pure vs I/O vs floats vs determinism)</summary><div class="inner">Pure cores exhaustively (happy/empty/edge/error, parametrized tables, approx for floats, purity asserts). I/O via tmp_path fixtures + golden files. Randomness/time/env via monkeypatch seeds (deterministic!). Regressions per bug (fail-old/pass-new proven). Run on save + CI gate. Untestable shape (I/O-mixed giants) → refactor to pure-core/imperative-shell first.</div></details>
+
+<h3>23.9 Exercises</h3>
+<div class="ex L1"><span class="pill">Level 1 · Understand</span><ol><li>Install ruff; run <code>check + format</code> on 3 old scripts; accept everything; journal each change class (what rule? why better?).</li><li>Convert 8 prints to leveled logs (right level each + lazy args); add one <code>exception()</code>; show level-filtering (INFO hides DEBUG).</li><li>Rename-a-thon: take a cryptic 40-liner; rename every name per §23.2 (units! predicates! verbs!); diff readability.</li></ol></div>
+<div class="ex L2"><span class="pill">Level 2 · Apply</span><ol><li>Refactor a 60-line script: extract 3+ pure functions + constants + config (argparse) + <code>main()</code> + guard + 8 pytest tests (incl. 2 error-paths). Before/after line counts + test run.</li><li>Hint a module fully; run mypy; fix every error (no <code>ignore</code>s); note which errors were REAL bugs vs annotation gaps.</li><li>Write the §23.7 README for a project; hand it to someone cold; fix every step they stumble on.</li></ol></div>
+<div class="ex L3"><span class="pill">Level 3 · Interview</span><ol><li>Review a peer's PR-diff (or your old code) with §23.7's checklist: file every finding as rule + evidence + fix (review-shaped, not complaint-shaped).</li><li>Design logging strategy for a nightly pipeline (levels per event class, rotation, alerting thresholds, secret-safety); defend each choice against "just print".</li></ol></div>
+<h3>23.10 Mini-challenge 🏆</h3>
+<div class="ex L2"><span class="pill">Challenge</span><p><strong>Professionalize end-to-end.</strong> Take your messiest working script: ruff-clean → rename → decompose (pure core + shell) → constants + argparse config → logging → hints + mypy-clean → pytest suite (≥10 tests, all paths) → README + checklist sign-off. Deliver before/after + test output + a 5-line "decisions" note. This is the exact bar Projects and the Capstone grade against.</p></div>
+<div class="callout good"><strong class="t">🏁 Chapter summary → next</strong><strong>Remember:</strong> automate style (ruff format+lint, on-save + CI) · name economics (units! predicates! verbs!) · craft functions (one job, small, pure, guarded, no magic) · logging over print (levels/names/lazy/exception) · config out of code (args &gt; env &gt; file; secrets NEVER in git) · hints + mypy (docs that check) · pytest everything (parametrize, approx, tmp_path, regressions) · README + self-review checklist per commit. <strong>Next:</strong> Chapter 24 — performance at full depth: measure-first, Big-O, structures, vectorization, and memory.</div>
+</div></section>

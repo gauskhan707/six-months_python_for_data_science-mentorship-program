@@ -1,0 +1,175 @@
+<!-- CHAPTER 19 -->
+<section class="chapter" id="ch19">
+<div class="ch-head"><div class="ch-num">19</div><div><div class="kicker">Design · efficiency</div><h2>Iterators and Generators</h2></div><div class="ch-tools"><button class="icon-btn bm" title="Bookmark">☆</button><button class="icon-btn done" title="Mark complete">✓</button><span class="chev">▾</span></div></div>
+<div class="ch-body">
+<p><strong>What/why.</strong> An <strong>iterable</strong> is anything you can loop over (list, str, dict, file, range, zip) — it provides <code>__iter__</code> (returns a fresh cursor). An <strong>iterator</strong> is the <em>cursor itself</em> — it provides <code>__next__</code> (next item or <code>StopIteration</code>) and returns itself from <code>__iter__</code>. A <strong>generator</strong> is the lazy, write-it-as-a-function way to build iterators: <code>yield</code> pauses the function and emits one value; the next <code>next()</code> resumes <em>right after the <code>yield</code></em>, locals intact. Why: <strong>O(1)-memory pipelines</strong> — process 10 GB row-by-row, represent infinite sequences, and compose streaming stages without a single intermediate list.</p>
+
+<h3>19.1 The protocol, exposed: iter() + next() + StopIteration</h3>
+<div class="code-block"><div class="code-head">drive iteration by hand (what for-loops automate) <button class="copy-btn">Copy</button></div><pre><code>xs = [10, 20]
+it = iter(xs)            # 1. ask the ITERABLE for a fresh ITERATOR (cursor at start)
+print(it is iter(it))    # True — iterators return THEMSELVES (that's the rule!)
+print(next(it))          # 10 — advance + return
+print(next(it))          # 20
+try:
+    next(it)             # exhausted → StopIteration (for-loops catch this SILENTLY)
+except StopIteration:
+    print("done — iterator exhausted (single-use, forever empty now)")
+print(next(iter(xs)))    # 10 — but the LIST makes FRESH cursors endlessly
+# The for-loop, desugared (exactly equivalent):
+#   _it = iter(xs)
+#   while True:
+#       try: x = next(_it)
+#       except StopIteration: break
+#       <body with x></code></pre><div class="out">True
+10
+20
+done — iterator exhausted (single-use, forever empty now)
+10</div></div>
+<p><strong>Step-by-step (the two roles).</strong> <code>xs</code> (list) is <em>re-iterable</em>: every <code>iter(xs)</code> spawns an independent cursor — loop it ten times, get ten full passes. <code>it</code> is <em>single-pass</em>: positions advance destructively; exhaustion is permanent (<code>list(it)</code> after = <code>[]</code>). Files, generators, zips, maps are single-pass iterators; lists/tuples/dicts/strings/ranges/sets are re-iterable iterables. <strong>The #1 generator bug is treating a single-pass iterator as re-iterable</strong> (§19.4).</p>
+<div class="code-block"><div class="code-head">write your own iterator class (the protocol, from scratch) <button class="copy-btn">Copy</button></div><pre><code>class Countdown:
+    """Iterator yielding n..1 (also its own iterable — single-pass!)."""
+    def __init__(self, n):
+        self.n = n
+    def __iter__(self):       # iterable side: return an iterator (here: self)
+        return self
+    def __next__(self):       # iterator side: next value or StopIteration
+        if self.n &lt;= 0:
+            raise StopIteration
+        self.n -= 1
+        return self.n + 1
+
+print(list(Countdown(3)))      # [3, 2, 1] — list() consumes via the protocol!
+for x in Countdown(2):         # for works on ANY protocol-follower
+    print("tick", x)
+# Generators (§19.2) replace ALL of this boilerplate with one `yield`.</code></pre><div class="out">[3, 2, 1]
+tick 2
+tick 1</div></div>
+
+<h3>19.2 Generators: yield-pause-resume (lazy functions)</h3>
+<p><strong>What.</strong> Any function containing <code>yield</code> is a <em>generator function</em>: calling it returns a generator object <em>without running a single line</em>; each <code>next()</code> runs until the next <code>yield</code>, emits its value, and <em>freezes the entire frame</em> (locals, instruction pointer, try-blocks); the following <code>next()</code> thaws and continues. <code>return value</code> in a generator raises <code>StopIteration(value)</code> (ending it — the value surfaces only via <code>yield from</code>, §19.5).</p>
+<div class="code-block"><div class="code-head">yield mechanics, line by line <button class="copy-btn">Copy</button></div><pre><code>def even_squares(limit):
+    """Yield even squares below limit — computed ON DEMAND, O(1) memory."""
+    print("  [gen starts]")
+    n = 0
+    while (sq := n * n) &lt; limit:
+        if sq % 2 == 0:
+            print(f"  [yield {sq}, FREEZE (n={n})]")
+            yield sq              # PAUSE: emit, freeze frame (n, sq survive!)
+            print(f"  [resumed after {sq}]")
+        n += 1
+    print("  [gen ends → StopIteration]")
+
+gen = even_squares(50)        # NOTHING runs yet (no "[gen starts]"!)
+print("created:", gen)
+print("got:", next(gen))      # runs → yields 0 → freezes
+print("got:", next(gen))      # thaws → yields 4 → freezes
+print("rest:", list(gen))     # consume to end → [16, 36]
+print("again:", list(gen))    # [] — EXHAUSTED (single-use — call again for fresh!)</code></pre><div class="out">created: &lt;generator object even_squares at 0x...&gt;
+  [gen starts]
+  [yield 0, FREEZE (n=0)]
+got: 0
+  [resumed after 0]
+  [yield 4, FREEZE (n=2)]
+got: 4
+  [resumed after 4]
+  [yield 16, FREEZE (n=4)]
+  [resumed after 16]
+  [yield 36, FREEZE (n=6)]
+  [resumed after 36]
+  [gen ends → StopIteration]
+rest: [16, 36]
+again: []</div></div>
+<p><strong>Generator expressions</strong> (<code>(EXPR for … if …)</code>) are to generator functions what comprehensions are to loops — inline laziness for pipelines: <code>sum(x*x for x in range(10**8))</code> never builds a list (O(1) RAM; the <code>[…]</code> twin needs ~GBs). Rule: parens directly in a call need no doubling (<code>sum(x for x in …)</code>), but standalone genexps need them (<code>g = (x for x in …)</code>).</p>
+<div class="callout good"><strong class="t">✅ Infinite sequences (laziness's party trick)</strong><code>def naturals(): n = 0; while True: yield n; n += 1</code> — an <em>infinite</em> stream in O(1) memory; consume with <code>itertools.islice</code> (<code>list(islice(naturals(), 5))</code>). Event streams, sensor feeds, ID dispensers, retry backoffs — anything unbounded is a generator. (Never <code>list()</code> an infinite one — that's a hang, not an error!)</div>
+
+<h3>19.3 Pipelines: stacked generators (the streaming architecture)</h3>
+<p><strong>What.</strong> Chain generators stage-by-stage — <code>read → parse → validate → filter → aggregate</code> — each pulling from the previous <em>one item at a time</em>. Memory stays O(1) (plus the aggregator's summary state) at <em>any</em> input size; stages are independently testable pure-ish functions; composition reads top-down.</p>
+<div class="code-block"><div class="code-head">4-stage CSV pipeline (constant memory at any file size) <button class="copy-btn">Copy</button></div><pre><code>import csv, io
+
+SAMPLE = "name,age\nAli,30\nZara,not-a-number\nOmar,25\n,40\n"
+def read_rows(text):                       # STAGE 1: source (file in real code)
+    yield from csv.DictReader(io.StringIO(text))
+
+def with_age(rows):                        # STAGE 2: parse+validate (drop bad, COUNT!)
+    bad = 0
+    for r in rows:
+        try:
+            r["age"] = int(str(r["age"]).strip())
+            if not r["name"].strip():
+                raise ValueError("blank name")
+        except (ValueError, TypeError, KeyError):
+            bad += 1
+            continue
+        yield r
+    print(f"[validate] dropped {bad} bad rows")
+
+def adults(rows):                          # STAGE 3: filter
+    return (r for r in rows if r["age"] &gt;= 18)
+
+def mean_age(rows):                        # STAGE 4: aggregate (O(1) state!)
+    total = count = 0
+    for r in rows:
+        total += r["age"]; count += 1
+    return total / count if count else None
+
+pipeline = mean_age(adults(with_age(read_rows(SAMPLE))))  # compose (nothing runs yet!)
+print("mean adult age:", pipeline)         # pull → all stages stream → 27.5
+# Real-file version: read_rows opens the path; everything else IDENTICAL.</code></pre><div class="out">[validate] dropped 2 bad rows
+mean adult age: 27.5</div></div>
+<p><strong>Step-by-step (the pull).</strong> <code>mean_age(…)</code> requests item 1 → <code>adults</code> requests from <code>with_age</code> → requests from <code>read_rows</code> → CSV parses row 1 → validated → adult → aggregated. Row 1 fully flows before row 2 is touched (<em>pull-driven</em>: downstream demand drives upstream work). At no point do two rows coexist in memory. Scale the file 1KB → 100GB: code unchanged, RAM unchanged. <em>This</em> is why generators matter for data.</p>
+
+<h3>19.4 Generator gotchas (all four, with fixes)</h3>
+<div class="callout warn"><strong class="t">⚠️ ① Single-use exhaustion</strong>Consumed = empty forever (<code>list(g)</code> twice → data, then <code>[]</code>). Especially treacherous: passing a generator to two consumers (second gets nothing!), and truthiness (<code>if gen:</code> always True — §9.2!). Fixes: re-call the factory for fresh streams; <code>itertools.tee</code> to fork (buffers the gap — memory!); materialize to list when small + reused.</div>
+<div class="callout warn"><strong class="t">⚠️ ② No len/index/slice</strong>Length unknown until consumed (possibly infinite!). <code>len(g)</code>/<code>g[0]</code> → TypeError. Fixes: <code>next(g)</code> / <code>islice(g, n)</code> peeks; <code>sum(1 for _ in g)</code> counts (consumes!); keep a parallel counter in pipelines.</div>
+<div class="callout warn"><strong class="t">⚠️ ③ Lazy errors surface LATE</strong>Exceptions raise <em>during consumption</em>, not at creation — tracebacks point at the consumer loop, confusing beginners ("the bug is in mean_age? no — in with_age's row 3!"). Fixes: validate eagerly at boundaries where cheap; include row-numbers in errors (§14.4's DataError!); wrap consumption in try/except with context.</div>
+<div class="callout warn"><strong class="t">⚠️ ④ Resource lifetimes</strong><code>def rows(p): with open(p) as f: for line in f: yield line</code> — the file stays open <em>until the generator is exhausted/closed</em> (the <code>with</code> exits when the generator's frame dies!). Partial consumption leaks the handle until GC. Fixes: consume fully; <code>gen.close()</code> explicitly (throws GeneratorExit inside — <code>finally</code>/<code>with</code> still run!); or <code>contextlib.closing</code>. (Same for locks/transactions held across yields.)</div>
+<div class="code-block"><div class="code-head">close() + try/finally inside generators <button class="copy-btn">Copy</button></div><pre><code>def tracked():
+    print("[open resource]")
+    try:
+        yield 1
+        yield 2
+    finally:                       # runs on exhaustion, close(), AND garbage collection
+        print("[resource released]")
+g = tracked()
+print(next(g))  # 1
+g.close()       # abandon early — finally STILL runs ✓
+print(list(tracked()))  # full consumption — finally runs at natural end too</code></pre><div class="out">[open resource]
+1
+[resource released]
+[open resource]
+[resource released]
+[1, 2]</div></div>
+
+<h3>19.5 yield from: delegation (+ send/throw/close in one paragraph)</h3>
+<p><strong><code>yield from SUBGEN</code></strong> delegates: yields every item of the sub-generator (flattening nested generators), forwards <code>send()/throw()/close()</code> into it, and evaluates to the sub-generator's <code>return value</code> (the only way to observe it!). Use: recursive generators (tree walks), pipeline stitching, refactoring long generators into helpers without breaking the stream.</p>
+<div class="code-block"><div class="code-head">yield from: flatten + recursive walk <button class="copy-btn">Copy</button></div><pre><code>def flatten(nested):
+    for x in nested:
+        if isinstance(x, list):
+            yield from flatten(x)   # delegate recursion (vs `for y in flatten(x): yield y`)
+        else:
+            yield x
+print(list(flatten([1, [2, [3, 4]], 5])))  # [1, 2, 3, 4, 5]
+
+def chain2(a, b):
+    yield from a
+    yield from b                    # stitch streams (≡ itertools.chain)
+print(list(chain2([1], (2, 3))))    # [1, 2, 3]
+# Advanced triad (know they exist; master on need):
+#   g.send(v) → value lands as `x = yield` result (coroutines — mostly superseded by async)
+#   g.throw(E) → raises E INSIDE at the yield point (inject failures in tests)
+#   g.close() → GeneratorExit inside (early abandon — §19.4)</code></pre><div class="out">[1, 2, 3, 4, 5]
+[1, 2, 3]</div></div>
+
+<h3>19.6 Interview questions</h3>
+<details><summary>Q1: Iterable vs iterator vs generator — with the protocol methods and an example each.</summary><div class="inner">Iterable: <code>__iter__</code> → fresh iterator; re-iterable (list, dict, str, range). Iterator: <code>__next__</code> (+ <code>__iter__</code> returning self); single-pass; raises StopIteration (files, zip, map). Generator: <code>yield</code>-based iterator factory — lazy, O(1) memory, single-use; frame freezes between yields. <code>for</code> = <code>iter()</code> + <code>next()</code> until StopIteration (caught silently).</div></details>
+<details><summary>Q2: What happens at `yield`, exactly? What state survives between next() calls?</summary><div class="inner">The frame freezes mid-function: locals, instruction pointer, exception handlers, <code>with</code>-held resources — all preserved. <code>next()</code> thaws exactly after the <code>yield</code>. Calling the generator function runs zero lines (returns the generator); errors surface during consumption, not creation.</div></details>
+<details><summary>Q3: Design a constant-memory pipeline over a 50GB CSV. What breaks if any stage materializes?</summary><div class="inner">Stages as generators (§19.3): stream DictReader → validate/parse (drop+count bad) → filter → O(1)-state aggregate (sums/counts, or bounded structures like Counter-with-cap/heapq). Any <code>list()</code>/<code>read()</code>/<code>sort()</code> (full) materialization spikes RAM to O(n) → OOM. Sorting needs external/chunked sort; joins need hashing-with-spill or DBs.</div></details>
+
+<h3>19.7 Exercises</h3>
+<div class="ex L1"><span class="pill">Level 1 · Understand</span><ol><li>Hand-drive <code>iter("ab")</code> to StopIteration; then desugar a <code>for</code> loop into <code>iter/next/try</code> manually. Show equivalence.</li><li><code>count_up(n)</code> generator: consume halfway with <code>next</code>, then <code>list()</code> the rest; then prove exhaustion + restart-by-recall.</li><li>Trace §19.2's freeze/thaw on paper for limit=10: list every print in order before running.</li></ol></div>
+<div class="ex L2"><span class="pill">Level 2 · Apply</span><ol><li>Streaming word-counter over a big file (generator + Counter, never <code>read()</code>); report top-10 + distinct count.</li><li><code>batched(iterable, n)</code> yielding full-or-short lists; handle empty input + infinite input (with islice proof).</li><li><code>flatten</code> via <code>yield from</code> (§19.5) extended to dicts (yield leaves) + cycle-safe (id-seen set — argue).</li></ol></div>
+<div class="ex L3"><span class="pill">Level 3 · Interview</span><ol><li>Build the §19.3 pipeline over a 1GB generated CSV; measure peak RSS (<code>/usr/bin/time -v</code> or tracemalloc) vs a list-based twin. Report the ratio + explain.</li><li>Implement <code>merge_sorted(a, b)</code> as a lazy generator (the merge-sort merge step); prove O(1) memory + correct interleaving on infinite inputs (islice!).</li></ol></div>
+<h3>19.8 Mini-challenge 🏆</h3>
+<div class="ex L2"><span class="pill">Challenge</span><p><strong>Build <code>stream_lab.py</code>.</strong> Generate a 500MB CSV programmatically (don't store one!); stream it through read→validate→filter→aggregate computing mean + top-3 + bad-row report — all in flat memory (prove with peak-RSS print before/after). Then break it three ways (list() the stream, reuse an exhausted gen, forget close() on partial read) and document each failure's signature. Streaming confidence, earned.</p></div>
+<div class="callout good"><strong class="t">🏁 Chapter summary → next</strong><strong>Remember:</strong> iterable (fresh cursors) vs iterator (single-pass cursor) vs generator (<code>yield</code>-built lazy iterator) · <code>for</code> = iter+next+silent-StopIteration · frames freeze at <code>yield</code> (locals/handlers/resources survive) · pipelines pull one item end-to-end (O(1) RAM any size) · gotchas: exhaustion, no-len, late errors, resource lifetimes (<code>close()</code> runs <code>finally</code>) · <code>yield from</code> delegates (+ return-value channel). <strong>Next:</strong> Chapter 20 — functional Python at full depth: map/filter/reduce, any/all, itertools, functools — and when plain code wins.</div>
+</div></section>

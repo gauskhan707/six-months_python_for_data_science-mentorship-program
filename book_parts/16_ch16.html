@@ -1,0 +1,116 @@
+<!-- CHAPTER 16 -->
+<section class="chapter" id="ch16">
+<div class="ch-head"><div class="ch-num">16</div><div><div class="kicker">Scale &amp; ecosystem</div><h2>Modules and Packages</h2></div><div class="ch-tools"><button class="icon-btn bm" title="Bookmark">☆</button><button class="icon-btn done" title="Mark complete">✓</button><span class="chev">▾</span></div></div>
+<div class="ch-body">
+<p><strong>What/why.</strong> A <strong>module</strong> is one <code>.py</code> file — a namespace you can import. A <strong>package</strong> is a folder of modules forming a dotted namespace (<code>sales_tool.analysis</code>), marked by <code>__init__.py</code>. Imports exist to <strong>split programs into understandable, reusable, testable pieces</strong> instead of one giant script — and to tap the <strong>standard library</strong> ("batteries included": <code>csv, json, pathlib, math, datetime, collections, itertools, statistics, argparse, logging…</code>) plus 500k+ third-party packages. This chapter teaches import mechanics completely: forms, search order, the <code>__main__</code> guard, package layout, and the circular-import trap — so multi-file programs feel inevitable, not magical.</p>
+
+<h3>16.1 Import forms: what each binds (exactly)</h3>
+<div class="code-block"><div class="code-head">import forms + namespace effects <button class="copy-btn">Copy</button></div><pre><code>import math                 # binds NAME 'math' → module. Use: math.sqrt(16)
+from pathlib import Path    # binds NAME 'Path' → the class. Use: Path("x")
+import collections as col   # binds ALIAS 'col' (community: numpy as np, pandas as pd)
+from math import sqrt, pi   # binds 'sqrt' + 'pi' directly
+from math import sqrt as sq # aliased from-import (dodge collisions)
+print(math.sqrt(16), sqrt(25), sq(36), pi, col.Counter("aab"))
+# from math import *        # 🚫 NEVER in real code: mystery names, collisions, no traceability
+print("module:", math.__name__)          # modules know their names (paths vary by install!)</code></pre><div class="out">4.0 5.0 6.0 3.141592653589793 Counter({'a': 2, 'b': 1})
+module: math</div></div>
+<p><strong>Step-by-step (<code>from pathlib import Path</code>).</strong> ① Import system finds + loads the <code>pathlib</code> module object (executing it once, caching in <code>sys.modules</code>). ② Looks up attribute <code>Path</code> on it. ③ Binds <em>only</em> <code>Path</code> in your namespace (<code>pathlib</code> itself stays unbound — <code>pathlib.Path</code> would NameError!). Contrast <code>import pathlib</code>: binds the module; you reach everything through it (verbose but explicit — the default for stdlib in this book).</p>
+<p><strong>Style rules (PEP 8).</strong> Imports at the <em>top</em>, grouped: ① stdlib, ② third-party, ③ local — alphabetical within groups, blank line between. One import per line (<code>import os, sys</code> banned). <code>from</code>-imports for names used heavily, plain <code>import</code> for namespaces (and always for modules with common attribute names — <code>os.path</code> beats a bare <code>path</code>). Aliases only for established conventions (<code>np, pd, plt</code>) or genuine collision-dodging.</p>
+<div class="callout bad"><strong class="t">🚫 from x import * — the four sins</strong>① <em>Mystery names:</em> readers can't tell where <code>sqrt</code> came from. ② <em>Silent collisions:</em> two star-imports overwrite each other's names (last wins, no warning). ③ <em>Linter blindness:</em> undefined-name detection breaks. ④ <em>API fragility:</em> upstream additions shadow your names on upgrade. (Packages control it via <code>__all__</code> — which exists for <em>their</em> interactive convenience, not your code.)</div>
+
+<h3>16.2 How Python finds modules: sys.path, sys.modules, and shadowing</h3>
+<p><strong>What — search order (exact):</strong> ① <code>sys.modules</code> cache (already imported? reuse — modules execute <em>once per process</em>). ② The script's directory (or cwd for <code>-c</code>/REPL; the <em>cwd</em> for <code>-m</code> — §16.4!). ③ <code>PYTHONPATH</code> environment entries. ④ Installed distributions (<code>site-packages</code> — your venv's, Chapter 17). ⑤ The standard library. Inspect live: <code>import sys; print("\n".join(sys.path))</code>.</p>
+<div class="code-block"><div class="code-head">import machinery, observed <button class="copy-btn">Copy</button></div><pre><code>import sys
+print("exe set:", bool(sys.executable))  # WHICH python exists (print it raw in YOUR venv check — Ch. 17)
+print("path ok:", isinstance(sys.path, list) and len(sys.path) &gt; 0)  # [0] = script dir (or ''/cwd nuances)
+import math
+print("cached:", sys.modules["math"] is math)  # True — second import reuses, never re-runs
+print("stdlib?", "site-packages" not in getattr(math, "__file__", "builtin"))
+# Find WHERE a name would come from (diagnose shadowing!):
+import importlib.util
+print("json found:", importlib.util.find_spec("json") is not None)  # (print the spec raw to see its origin!)</code></pre><div class="out">exe set: True
+path ok: True
+cached: True
+stdlib? True
+json found: True</div></div>
+<p><strong>The shadowing catastrophe.</strong> Your script's directory is <em>first</em> on <code>sys.path</code> — so a file named <code>random.py</code>, <code>math.py</code>, <code>csv.py</code>, or <code>email.py</code> in your folder <strong>hijacks</strong> the stdlib module of that name for every import in the process (including imports <em>inside other libraries</em>!). Symptoms: <code>AttributeError: module 'random' has no attribute 'randint'</code> (your file isn't the stdlib!), <code>ImportError</code> loops. Rule: <strong>never name files after stdlib/third-party modules</strong> (check: <code>python -c "import NAME"</code> succeeding = taken). Diagnose with <code>print(module.__file__)</code> — if it points at <em>your</em> folder, you've been shadowed.</p>
+<div class="callout info"><strong class="t">💡 Modules run ONCE (import caching)</strong><code>import x</code> twice (even from different files) executes <code>x.py</code> once; later imports reuse <code>sys.modules["x"]</code>. Consequences: module-level code is <em>initialization</em> (runs at first import — keep it light/pure!); "reloading" needs <code>importlib.reload(x)</code> (fiddly — stale references linger; prefer restarting the process); circular imports see <em>half-initialized</em> modules (§16.5).</div>
+
+<h3>16.3 The __main__ guard: library AND script in one file</h3>
+<p><strong>What.</strong> When Python loads a file, it sets the module-global <code>__name__</code>: to <code>"__main__"</code> if the file is the <em>entry point</em> (run directly: <code>python stats_utils.py</code>), or to the <em>module name</em> if <em>imported</em> (<code>import stats_utils</code> → <code>__name__ == "stats_utils"</code>). The guard <code>if __name__ == "__main__":</code> runs demo/CLI/self-test code <em>only</em> in direct execution — imports stay side-effect-free.</p>
+<div class="code-block"><div class="code-head">stats_utils.py — the guarded dual-purpose file <button class="copy-btn">Copy</button></div><pre><code># stats_utils.py
+"""Tiny stats helpers (importable + directly runnable)."""
+
+def mean(xs):
+    if not xs:
+        raise ValueError("mean of empty")
+    return sum(xs) / len(xs)
+
+def main():
+    import sys
+    nums = [float(x) for x in sys.argv[1:]] or [1, 2, 3]
+    print("mean:", mean(nums))
+
+if __name__ == "__main__":   # direct run ONLY: python stats_utils.py 4 5 6
+    main()                   # import SKIPS this (no prints, no argv parsing, no exit!)</code></pre></div>
+<p><strong>Why without-the-guard hurts.</strong> Unguarded script code (prints, file writes, <code>sys.exit</code>, heavy compute, input prompts) runs <em>at import time</em> — slowing every importer, breaking tests (a stray <code>input()</code> hangs pytest!), and executing side effects in contexts that never asked. Professional rule: <strong>module top level = definitions + constants only</strong>; all action lives in functions, entered via <code>main()</code> + guard (or a real entry point — §16.6).</p>
+<p><strong>Anatomy of <code>main()</code>.</strong> Parse args → call pure library functions → print/write results → <code>return</code> exit code (int) → <code>raise SystemExit(main())</code> as the guard body for proper exit statuses (Project 5's CLI does exactly this). Keep <code>main()</code> thin: <em>orchestration only</em> — logic belongs in testable functions (Chapter 23).</p>
+
+<h3>16.4 Packages: folders as namespaces + absolute vs relative imports</h3>
+<p><strong>What.</strong> A <strong>package</strong> is a directory containing <code>__init__.py</code> (executed on first import of anything in the package; keep it tiny: version, key re-exports, nothing heavy) plus modules/subpackages. Dots navigate: <code>sales_tool.analysis.mean_by</code>. (Namespace packages <em>without</em> <code>__init__.py</code> exist (3.3+) for split-across-folders mega-projects — ignore until you need them.)</p>
+<div class="code-block"><div class="code-head">professional project layout (memorize this shape) <button class="copy-btn">Copy</button></div><pre><code>sales_tool/                    # PROJECT ROOT (has README, requirements, .git)
+├── pyproject.toml             # modern metadata+deps (or requirements.txt — Ch. 17)
+├── README.md                  # setup + usage (3 commands to green!)
+├── sales_tool/                # THE PACKAGE (import sales_tool...)
+│   ├── __init__.py            # tiny: __version__, maybe key re-exports
+│   ├── readers.py             # load CSV/JSON → Dataset (I/O boundary)
+│   ├── analysis.py            # PURE functions (mean_by, totals...) — testable!
+│   └── cli.py                 # argparse + main() + __main__ guard (thin shell)
+└── tests/
+    ├── __init__.py
+    └── test_analysis.py       # pytest: imports sales_tool.analysis (Ch. 23)</code></pre></div>
+<p><strong>Absolute (preferred) vs relative (fragile).</strong> <em>Absolute:</em> <code>from sales_tool.analysis import mean_by</code> — full path from project root; explicit, greppable, refactor-safe; works everywhere once the root is importable. <em>Relative:</em> <code>from .analysis import mean_by</code> / <code>from ..x import y</code> — relative to the <em>current package</em>; breaks the moment someone runs the file directly (<code>python sales_tool/cli.py</code> → "attempted relative import with no known parent package"). Rule: <strong>absolute everywhere</strong>; run package code with <code>python -m sales_tool.cli</code> from the root (<code>-m</code> sets up package context + cwd on path — §16.5's table).</p>
+<div class="code-block"><div class="code-head">__init__.py: tiny and deliberate <button class="copy-btn">Copy</button></div><pre><code># sales_tool/__init__.py
+"""Sales analysis toolkit."""
+__version__ = "0.1.0"
+from sales_tool.analysis import mean_by  # curated shortcut: sales_tool.mean_by works
+__all__ = ["mean_by", "__version__"]     # controls `from sales_tool import *` (still avoid *)</code></pre></div>
+
+<h3>16.5 Circular imports + script-vs--m (the two import riddles)</h3>
+<p><strong>Circular imports (a imports b, b imports a).</strong> At runtime: importing <code>a</code> starts executing it → hits <code>import b</code> → starts executing <code>b</code> → hits <code>import a</code> → finds <code>a</code> <em>half-initialized</em> in <code>sys.modules</code> → <code>b</code> grabs names that don't exist yet → <code>ImportError</code>/<code>AttributeError</code>. Fixes (best first): ① <strong>restructure</strong> — move shared code to a third module both import (the real fix — cycles signal misplaced responsibilities); ② move one import <em>inside the function</em> that needs it (lazy — hides the smell, acceptable for genuinely optional/heavy deps); ③ import the <em>module</em> not names (<code>import a</code> + <code>a.name</code> at call time — works if use happens post-init).</p>
+<p><strong><code>python pkg/mod.py` vs <code>python -m pkg.mod</code> (know cold).</strong></p>
+<table><tr><th></th><th><code>python pkg/mod.py</code></th><th><code>python -m pkg.mod</code> (from root)</th></tr>
+<tr><td><code>sys.path[0]</code></td><td><code>pkg/</code> (the file's folder!)</td><td>cwd (project root ✓)</td></tr>
+<tr><td><code>__name__</code></td><td><code>"__main__"</code></td><td><code>"__main__"</code></td></tr>
+<tr><td>Package context</td><td>NONE (relative imports die)</td><td>Full (<code>pkg.mod</code> known; <code>.</code> imports work)</td></tr>
+<tr><td>Sibling imports</td><td>Accidental (via <code>pkg/</code> on path — fragile)</td><td>Proper (absolute from root)</td></tr></table>
+<p>Rule: run multi-file projects <strong>from the root with <code>-m</code></strong> + absolute imports. The script-path form is for single-file scripts only.</p>
+
+<h3>16.6 Standard library tour (the batteries that matter for data work)</h3>
+<table><tr><th>Module</th><th>Job</th><th>Where this book uses it</th></tr>
+<tr><td><code>pathlib, os, sys</code></td><td>Paths, process, interpreter info</td><td>Ch. 15/17, every project</td></tr>
+<tr><td><code>csv, json</code></td><td>Table + nested data formats</td><td>Ch. 15/25, Projects 2–5</td></tr>
+<tr><td><code>math, statistics, random</code></td><td>Numerics, descriptives, sampling</td><td>Ch. 24/25 (seed with <code>random.seed</code> for reproducibility!)</td></tr>
+<tr><td><code>datetime, zoneinfo</code></td><td>Dates/times/timezones</td><td>Ch. 25 (parse early, keep tz-aware!)</td></tr>
+<tr><td><code>collections</code></td><td><code>Counter, defaultdict, deque, namedtuple</code></td><td>Ch. 7/8/13, Projects 3–4</td></tr>
+<tr><td><code>itertools, functools</code></td><td>Lazy combinators, memoization, partials</td><td>Ch. 19/20 (pipelines!)</td></tr>
+<tr><td><code>argparse, logging</code></td><td>CLIs, professional diagnostics</td><td>Project 5, Ch. 23</td></tr>
+<tr><td><code>re</code></td><td>Regular expressions (text patterns)</td><td>Ch. 6 §6.9 (use sparingly — readability!)</td></tr>
+<tr><td><code>unittest.mock/pytest</code></td><td>Testing (pytest is third-party)</td><td>Ch. 23</td></tr></table>
+<div class="callout good"><strong class="t">✅ Before pip-installing anything…</strong>Check the stdlib first: dates, CSV/JSON, stats basics, CLI parsing, logging, paths, randomness, serialization (<code>pickle</code> — never unpickle untrusted data!), compression (<code>gzip/zipfile/tarfile</code>), concurrency (<code>threading/multiprocessing/asyncio</code>). Every dependency is a liability (supply chain, version drift, install weight) — stdlib is free, reviewed, and already installed.</div>
+
+<h3>16.7 Interview questions</h3>
+<details><summary>Q1: Module vs package? What's __init__.py for? What goes in it?</summary><div class="inner">Module = one <code>.py</code> file (a namespace). Package = directory of modules under a dotted name, marked by <code>__init__.py</code> (runs on first import of anything inside). Keep it tiny: <code>__version__</code>, curated re-exports, <code>__all__</code> — never heavy compute/side effects (they'd run at import time for every importer).</div></details>
+<details><summary>Q2: What does `if __name__ == "__main__"` do and why is it mandatory in dual-purpose files?</summary><div class="inner">Direct runs set <code>__name__ = "__main__"</code>; imports set it to the module name. The guard confines script behavior (arg parsing, prints, exits) to direct execution, keeping imports side-effect-free (fast, test-safe). Without it: imports trigger I/O/prompts/exits — breaking tests and library use.</div></details>
+<details><summary>Q3: How does Python find imports? Name the shadowing failure and its diagnosis.</summary><div class="inner">Order: <code>sys.modules</code> cache → script dir → PYTHONPATH → site-packages (venv!) → stdlib. Shadowing: your <code>random.py</code> hijacks stdlib <code>random</code> (script dir is first!) → bizarre AttributeErrors. Diagnose: <code>print(mod.__file__)</code> — your folder = shadowed. Never name files after oms, and the three fixes ranked.</summary><div class="inner">Mechanism: a→b→a sees a half-initialized module in <code>sys.modules</code> (names missing) → ImportError/AttributeError. Fixes: ① restructure (shared code → third module — the real fix), ② lazy function-level import, ③ module-not-names import + deferred attribute use. Cycles signal misplaced responsibilities — treat as design feedback.</div></details>
+
+<h3>16.8 Exercises</h3>
+<div class="ex L1"><span class="pill">Level 1 · Understand</span><ol><li>Print <code>sys.path</code> from a script vs REPL vs <code>-m</code>; identify <code>path[0]</code> in each and explain the differences.</li><li>Build a 2-file project (lib with 2 functions + guarded demo; script importing it). Show import-silence vs direct-run output.</li><li>Plant a shadowing bug (<code>statistics.py</code> in cwd importing stdlib statistics elsewhere); diagnose via <code>__file__</code>; fix by renaming.</li></ol></div>
+<div class="ex L2"><span class="pill">Level 2 · Apply</span><ol><li>Reproduce a circular import; read the traceback precisely (which name is missing where?); fix by extracting a shared module.</li><li>Convert a flat 100-line script into the §16.4 layout (package + tests + guard + <code>-m</code> runs). All behavior identical, imports absolute.</li><li>Write a package <code>__init__.py</code> with version + curated re-export + <code>__all__</code>; demonstrate <code>import pkg; pkg.name</code> working.</li></ol></div>
+<div class="ex L3"><span class="pill">Level 3 · Interview</span><ol><li>Explain <code>sys.modules</code> caching consequences: import-time side effects, why reload is fiddly, and how singletons-via-module work (and their test-isolation downside).</li><li>Design lazy/optional imports for a heavy dependency (e.g., <code>matplotlib</code> only when plotting): function-level vs <code>TYPE_CHECKING</code> vs try/except-ImportError with helpful message. Argue trade-offs.</li></ol></div>
+<h3>16.9 Mini-challenge 🏆</h3>
+<div class="ex L2"><span class="pill">Challenge</span><p><strong>Build <code>import_lab.py</code>.</strong> A diagnostic script printing: executable, <code>sys.path</code> (annotated: which entry is what), <code>__name__</code>, whether run as script vs <code>-m</code> (detectable how?), resolution (<code>find_spec</code>) of 5 stdlib names + proof none are shadowed, and a deliberate circular-import pair (in temp files) with the captured error + your fix. Run it both ways (<code>python import_lab.py</code> vs <code>python -m import_lab</code>) and diff the outputs — the §16.5 table, proven live.</p></div>
+<div class="callout good"><strong class="t">🏁 Chapter summary → next</strong><strong>Remember:</strong> modules = files, packages = folders + tiny <code>__init__.py</code> · import forms bind different names (never <code>*</code>) · search = cache → script-dir → PYTHONPATH → venv → stdlib (never shadow stdlib names!) · modules run once · <code>__main__</code> guard on every dual-purpose file (thin <code>main()</code>) · absolute imports + <code>-m</code> from root · cycles → restructure · stdlib before pip. <strong>Next:</strong> Chapter 17 — virtual environments &amp; pip at full depth: isolation, pinning, and reproducibility as professional baseline.</div>
+</div></section>
+olation, pinning, and reproducibility as professional baseline.</div>
+</div></section>

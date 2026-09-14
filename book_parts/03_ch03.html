@@ -1,0 +1,171 @@
+<!-- CHAPTER 3 -->
+<section class="chapter" id="ch03">
+<div class="ch-head"><div class="ch-num">3</div><div><div class="kicker">Core mental model</div><h2>Variables and Memory</h2></div><div class="ch-tools"><button class="icon-btn bm" title="Bookmark">☆</button><button class="icon-btn done" title="Mark complete">✓</button><span class="chev">▾</span></div></div>
+<div class="ch-body">
+<p><strong>The single most important mental-model chapter in the book.</strong> In Python, <code>x = 5</code> does <strong>not</strong> "put 5 into box x". It <strong>creates the object <code>5</code> in memory and attaches the name <code>x</code> to it</strong>. Variables are <em>names (references) pointing at objects</em> — not boxes holding values. This one correction dissolves half of all Python surprises you will ever meet: mutable aliasing bugs, <code>==</code> vs <code>is</code>, function side effects, default-argument traps, and "why did my other variable change?!". Read slowly; draw every diagram yourself.</p>
+
+<h3>3.1 The core model: objects, names, references, assignment</h3>
+<p><strong>What — four definitions to memorize exactly:</strong></p>
+<ul>
+<li><strong>Object:</strong> a region of memory holding a <em>value</em> plus its <em>type</em> and bookkeeping metadata (notably a <em>reference count</em>). In Python, <strong>everything is an object</strong> — numbers, strings, lists, functions, classes, modules, even <code>None</code>. There are no "primitive values" living outside the object system (unlike Java's <code>int</code> vs <code>Integer</code>).</li>
+<li><strong>Variable (name):</strong> a <em>label</em>, stored in a <em>namespace</em> (a name→object table — Chapter 12), that <em>refers to</em> an object. Names are entries in a dictionary-like structure; they occupy no "value space" themselves.</li>
+<li><strong>Reference:</strong> the arrow from a name to its object. Multiple names can reference the same object; one name references exactly one object at a time.</li>
+<li><strong>Assignment (<code>=</code>):</strong> the act of <em>binding (or rebinding)</em> a name to an object. It evaluates the right side to an object, then points the left-side name at it. <strong>Assignment never copies data. Ever.</strong></li>
+</ul>
+<p><strong>Why this design exists.</strong> Uniformity: with everything-an-object and assignment-as-binding, the language needs only <em>one</em> mechanism for all data — no separate rules for "primitives vs objects", no manual memory copying on <code>=</code>, cheap function calls (passing a huge list passes one reference, not a copy). Memory safety follows: since names never <em>contain</em> values, the memory manager (reference counting + cyclic GC, §1.12 Q5) can track exactly how many arrows point at each object and free it precisely when the last arrow leaves.</p>
+<p><strong>Intuition: balloons and strings.</strong> Objects are <em>balloons</em> floating in memory; variables are <em>strings tied to them</em>. <code>x = [1, 2]</code> inflates a balloon (the list) and ties string <code>x</code> to it. <code>y = x</code> ties a <em>second string to the same balloon</em> — no new balloon exists. Let air out through <code>y</code> (mutate) and <code>x</code>'s balloon deflates too — same balloon. <code>x = [9]</code> inflates a <em>new</em> balloon and <em>reties</em> string <code>x</code> to it; string <code>y</code> still holds the old one. When a balloon has <em>zero strings</em>, Python pops it (frees the memory).</p>
+<div class="diagram"><strong>Figure 3.1 — Assignment binds; rebinding moves only one arrow</strong><div class="mem"><div class="membox"><b>after x = [1,2]; y = x</b>names: x ──→ ● [1, 2]<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;y ──┘<br><em>ONE object, TWO names</em></div><div class="membox"><b>after y.append(3)</b>names: x ──→ ● [1, 2, 3]<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;y ──┘<br><em>mutated in place — both see it</em></div><div class="membox"><b>after x = [9]</b>x ──→ ● [9] (NEW)<br>y ──→ ● [1, 2, 3] (old)<br><em>rebinding ≠ changing</em></div></div></div>
+<p><strong>Syntax + smallest example.</strong> Assignment is <code>name = expression</code>. Multiple assignment and unpacking are the same mechanism, repeated:</p>
+<div class="code-block"><div class="code-head">assignment forms <button class="copy-btn">Copy</button></div><pre><code>x = 5              # bind x → int object 5
+y = x              # bind y → THE SAME object (no copy!)
+a = b = 0          # chain: both names → one int 0
+p, q = 10, 20      # unpack: p → 10, q → 20 (right side is a tuple)
+print(x, y, a, b, p, q)</code></pre><div class="out">5 5 0 0 10 20</div></div>
+<div class="code-block"><div class="code-head">the balloon demo — aliasing, mutation, rebinding <button class="copy-btn">Copy</button></div><pre><code>x = [1, 2]
+y = x               # second string, SAME balloon (no copy!)
+print(x is y)       # True: identical object (identity operator)
+print(id(x) == id(y))  # True: same memory address
+y.append(3)         # let air out through y...
+print(x)            # ...x's balloon deflated too: [1, 2, 3]
+x = [9]             # retie ONLY x to a NEW balloon
+print(x, y)         # [9] [1, 2, 3] — y untouched. Proof.</code></pre><div class="out">True
+True
+[1, 2, 3]
+[9] [1, 2, 3]</div></div>
+<p><strong>Step-by-step execution.</strong> Line 1: list object <code>[1,2]</code> created (refcount 1), name <code>x</code> bound. Line 2: name <code>y</code> bound to that same object (refcount 2) — <em>zero bytes of list data copied</em>. Lines 3–4: <code>is</code> compares identity (are these the same balloon?), <code>id()</code> exposes the address — both confirm. Line 5: <code>append</code> mutates the shared object in place (refcount unchanged, contents changed). Line 7: a <em>new</em> list <code>[9]</code> is created; <code>x</code> is retied to it (old object's refcount drops 2→1, so it survives — <code>y</code> still holds it).</p>
+<p><strong>More examples — rebinding chains and <code>del</code>:</strong></p>
+<div class="code-block"><div class="code-head">rebinding chains + del removes the string, not the balloon <button class="copy-btn">Copy</button></div><pre><code>a = [1]
+b = a
+c = b        # three strings, one balloon (refcount 3)
+del b        # remove ONE string (refcount 2) — balloon floats on
+print(a, c)  # [1] [1]
+a = "now a string"   # retie a elsewhere (refcount 1: only c)
+print(a, c)          # now a string [1]
+# del c  → refcount 0 → balloon popped (memory freed)</code></pre><div class="out">[1] [1]
+now a string [1]</div></div>
+<div class="callout warn"><strong class="t">⚠️ Common mistake: "boxes" thinking</strong>If you picture variables as boxes, <code>y = x; y.append(3)</code> changing <code>x</code> feels like paranormal activity. There is no paradox under strings-and-balloons: two strings, one balloon. <em>Every</em> "spooky change at a distance" in Python is shared-object mutation. When it bites, ask: "how many names point at this object?" (<code>sys.getrefcount</code> counts, roughly).</div>
+<p><strong>Debugging lens.</strong> Suspected aliasing? (1) <code>print(a is b)</code> — same balloon? (2) <code>print(id(a), id(b))</code> — same address? (3) mutate through one name in a scratch snippet and observe the other. Fix by <em>copying at the binding site</em>: <code>y = x.copy()</code> / <code>list(x)</code> / <code>copy.deepcopy</code> (Chapter 7 teaches which).</p>
+<p><strong>📊 Data-Science connection.</strong> Passing a million-row structure to a function costs nothing (one reference), which is why Python APIs casually accept huge datasets. But the same mechanism means a cleaning function that mutates its input <em>corrupts the caller's data</em> — the #1 source of "my raw data changed?!" panic. Professional rule (Chapters 11/23): functions either <em>return new objects</em> (pure) or <em>document mutation loudly</em> — never mutate silently.</p>
+
+<h3>3.2 Identity, equality, id(): same balloon vs equal balloons</h3>
+<p><strong>What.</strong> <strong>Identity</strong> (<code>is</code> / <code>id()</code>) asks: <em>are these two names tied to the same object in memory?</em> <strong>Equality</strong> (<code>==</code>) asks: <em>do these two (possibly distinct) objects have equal value?</em> <code>id(obj)</code> returns the object's identity — in CPython, its memory address (an integer, unique among live objects).</p>
+<p><strong>Why both exist.</strong> Different questions need different answers: deduplicating data needs <em>value</em> comparison (<code>==</code>); checking "was anything passed at all?" needs <em>identity</em> against the <code>None</code> singleton (<code>is None</code>); aliasing diagnosis needs <code>is</code>. Conflating them is a top-5 Python bug.</p>
+<div class="code-block"><div class="code-head">== vs is, settled forever <button class="copy-btn">Copy</button></div><pre><code>a = [1, 2]
+b = [1, 2]     # a SEPARATE balloon with equal contents
+c = a          # same balloon
+print(a == b)  # True  — equal VALUE (list __eq__ compares contents)
+print(a is b)  # False — DIFFERENT objects
+print(a is c)  # True  — same object
+print(id(a) == id(c), id(a) == id(b))  # True False — same/different? (raw ids vary per run)
+print(None is None)  # True — None is a singleton; ALWAYS test with 'is'</code></pre><div class="out">True
+False
+True
+True False
+True</div></div>
+<div class="callout bad"><strong class="t">🚫 Never use 'is' for values</strong><code>x is 5</code>, <code>s is "abc"</code>, <code>tup is (1,2)</code> sometimes "work" in the REPL because CPython <em>caches/interns</em> small ints and some strings (an implementation detail!). They break unpredictably for larger values (<code>1000 is 10**3</code> → False). Rule: <code>is</code> <strong>only</strong> for <code>None</code> (and rarely <code>True/False</code> singletons). Values always compare with <code>==</code>.</div>
+
+<h3>3.3 Mutable vs immutable: the great divide</h3>
+<p><strong>What.</strong> An <strong>immutable</strong> object can <em>never change its value after creation</em>: <code>int, float, complex, bool, str, bytes, tuple, frozenset, NoneType</code>. Any operation that "modifies" one actually <em>creates a new object</em> and (typically) rebinds your name to it. A <strong>mutable</strong> object <em>can change in place</em>: <code>list, dict, set, bytearray</code> — same balloon, new shape; every name tied to it observes the change.</p>
+<p><strong>Why immutables exist.</strong> Four reasons: (1) <strong>Hashability</strong> — dict keys and set members need stable identities (Chapter 8: mutating a key would corrupt the hash table); (2) <strong>Safe sharing</strong> — passing an int to ten functions can't corrupt it; (3) <strong>Interning/caching</strong> — CPython reuses small ints and some strings, saving memory; (4) <strong>Reasoning</strong> — immutable data never changes under you, eliminating whole bug classes (functional programming, Chapter 20, leans on this).</p>
+<p><strong>Intuition.</strong> Immutable objects are <em>carved in stone</em> — to "change" the inscription you carve a <em>new stone</em>. Mutable objects are <em>whiteboards</em> — same board, erased and rewritten, and everyone looking at that board sees the latest writing.</p>
+<div class="diagram"><strong>Figure 3.2 — Immutable rebinding vs mutable in-place change</strong><div class="mem"><div class="membox"><b>a = 10; a = a + 5</b>● 10 (old, orphaned)<br>a ──→ ● 15 (NEW)<br><em>id CHANGED — new stone</em></div><div class="membox"><b>m = [1,2]; m.append(3)</b>m ──→ ● [1, 2, 3]<br>(same balloon!)<br><em>id SAME — same whiteboard</em></div></div></div>
+<div class="code-block"><div class="code-head">prove it with id() <button class="copy-btn">Copy</button></div><pre><code># Immutable int: rebinding — new object, new id
+a = 10
+before = id(a)
+a = a + 5
+print(a, id(a) == before)   # 15 False — DIFFERENT object!
+
+# Immutable str: same story
+s = "hi"
+before = id(s)
+s += "!"
+print(s, id(s) == before)   # hi! False
+
+# Mutable list: in-place — same object, same id
+m = [1, 2]
+before = id(m)
+m.append(3)
+print(m, id(m) == before)   # [1, 2, 3] True — SAME object!</code></pre><div class="out">15 False
+hi! False
+[1, 2, 3] True</div></div>
+<p><strong>Step-by-step (the int case).</strong> <code>a = 10</code>: int object <code>10</code> created, <code>a</code> bound. <code>a + 5</code>: int addition <em>creates a brand-new</em> int object <code>15</code> (the <code>10</code> is untouched — it must be, others may reference it). <code>a = …</code>: <code>a</code> retied to <code>15</code>; <code>10</code>'s refcount drops (freed if zero). Contrast <code>m.append(3)</code>: <em>no assignment happens</em> — a method mutates the existing list's internals; the name never moves.</p>
+<p><strong>The tuple "loophole" (understand, don't fear).</strong> <code>t = ([1], [2])</code> — the tuple's <em>references</em> are frozen (can't repoint <code>t[0]</code>), but the <em>referenced lists</em> remain mutable (<code>t[0].append(99)</code> works). Immutability is <em>shallow</em>: it locks the container's arrows, not the balloons they point to. Consequence: such tuples are <em>unhashable</em> (can't be dict keys) — hashability requires <em>deep</em> immutability.</p>
+<div class="callout warn"><strong class="t">⚠️ The #1 aliasing bug family (preview of Chapters 7/11)</strong><code>row = [0]*3; board = [row, row, row]</code> looks like three rows but is <strong>one list referenced three times</strong> — editing any "row" edits all. Fix: build <em>independent</em> objects: <code>[[0]*3 for _ in range(3)]</code>. Same family: <code>y = x</code> then mutating when you meant to copy (use <code>.copy()</code>), and mutable default arguments (<code>def f(xs=[])</code> — Chapter 11).</div>
+<div class="callout good"><strong class="t">✅ Data-Science connection</strong>Pandas' infamous <code>SettingWithCopyWarning</code> is <em>exactly</em> this chapter: "are you mutating the original DataFrame or a copy?" — a question about shared vs independent objects. Master aliasing here in pure Python, and that warning becomes readable instead of terrifying.</div>
+
+<h3>3.4 Dynamic typing: names have no type — objects do</h3>
+<p><strong>What.</strong> Python is <strong>dynamically typed</strong>: a name (<code>x</code>) has <em>no type at all</em> — it can point at an <code>int</code> now and a <code>str</code> later. Only <em>objects</em> carry types, and type compatibility is checked <em>at runtime</em>, when each operation executes. Contrast <strong>statically typed</strong> languages (C, Java, Rust): each variable is <em>declared</em> with a fixed type (<code>int x;</code>) enforced <em>at compile time</em> — <code>x = "hi"</code> is rejected before the program ever runs.</p>
+<p><strong>Why dynamic typing exists.</strong> Flexibility and speed of expression: one function can process ints, floats, or Decimals without overloads; exploratory code doesn't pause for declarations; duck typing ("if it quacks like a DataFrame…") enables generic, reusable tools. The price: type mistakes surface <em>during execution</em> (possibly in production, on row 9,000,001) instead of at compile time — mitigated professionally with tests, type hints, and runtime validation (Chapters 11/23).</p>
+<p><strong>Intuition + analogy.</strong> Static typing is a <em>labeled parking bay</em> ("compact cars only" — enforced at the gate). Dynamic typing is an <em>unlabeled bay with a smart attendant</em>: anything may park, but each <em>operation</em> checks suitability on the spot ("can I tow this with a car hook? no? TypeError!"). Python is additionally <em>strongly</em> typed: it refuses nonsense rather than silently coercing (<code>"5" + 5</code> → <code>TypeError</code>, unlike JavaScript's <code>"55"</code>). Dynamic ≠ sloppy: checks happen <em>late</em>, but they happen <em>strictly</em>.</p>
+<div class="code-block"><div class="code-head">dynamic typing + introspection <button class="copy-btn">Copy</button></div><pre><code>x = 10                  # x → int object. The NAME has no type.
+print(type(x))          # &lt;class 'int'&gt; — the OBJECT's type
+x = "ten"               # retied → str object. Perfectly legal.
+print(type(x))          # &lt;class 'str'&gt;
+print(isinstance(x, str))   # True — the PREFERRED type check
+print(isinstance(True, int))  # True! bool subclasses int (Ch. 4)</code></pre><div class="out">&lt;class 'int'&gt;
+&lt;class 'str'&gt;
+True
+True</div></div>
+<p><strong>Type checking done right:</strong> prefer <code>isinstance(x, T)</code> over <code>type(x) == T</code> — it respects <em>inheritance</em> (a <code>bool</code> passes <code>isinstance(x, int)</code>; subclasses of your classes pass too) and accepts tuples (<code>isinstance(v, (int, float))</code>). Even better, document expectations with <strong>type hints</strong> (<code>def mean(xs: list[float]) -&gt; float</code>, Chapters 11/23): hints don't enforce at runtime, but tools (<code>mypy</code>, IDEs) catch mistakes <em>while you type</em> — recovering much of static typing's safety without losing flexibility.</p>
+<div class="callout warn"><strong class="t">⚠️ Common mistake: checking type when you should check behavior</strong><code>if type(x) == list: …</code> rejects tuples, subclasses, and lazy sequences that would all work fine. Pythonic code checks <em>capability</em> (duck typing: just iterate and let failures raise) or uses <code>isinstance</code> with abstract types. Reserve strict checks for true boundaries (parsing external data, public APIs).</div>
+
+<h3>3.5 Naming: rules, conventions, and why names are a user interface</h3>
+<p><strong>What — the hard rules (grammar).</strong> Names consist of letters, digits, and underscores; must not <em>start</em> with a digit; are <em>case-sensitive</em> (<code>Age ≠ age</code>); and must not be <em>keywords</em> (<code>if, for, class, …</code> — see <code>keyword.kwlist</code>). Unicode letters are allowed (<code>café = 1</code> works) but ASCII is the professional norm.</p>
+<p><strong>Why conventions matter more than rules.</strong> Names are the <em>user interface of your code</em>: readers (and interviewers) judge clarity from names before reading logic. Python's conventions (PEP 8, Chapter 23) let any Pythonista instantly classify a name:</p>
+<table><tr><th>Convention</th><th>Rule</th><th>Example</th><th>Signals to the reader</th></tr>
+<tr><td>Variables / functions</td><td><code>snake_case</code>, descriptive</td><td><code>customer_age</code>, <code>total_sales</code></td><td>Ordinary data / action</td></tr>
+<tr><td>Constants</td><td><code>UPPER_SNAKE</code>, module level</td><td><code>MAX_RETRIES = 3</code></td><td>Set once, never reassigned (by agreement)</td></tr>
+<tr><td>Classes</td><td><code>PascalCase</code></td><td><code>DataLoader</code></td><td>A blueprint (Chapter 18)</td></tr>
+<tr><td>Private-ish</td><td>Leading underscore</td><td><code>_cache</code></td><td>"Internal — don't touch from outside"</td></tr>
+<tr><td>Throwaway</td><td>Single underscore</td><td><code>for _ in range(3)</code></td><td>"I need the loop, not the value"</td></tr></table>
+<div class="callout bad"><strong class="t">🚫 Never shadow builtins</strong><code>list = [1,2]</code>, <code>str = "x"</code>, <code>id = 5</code>, <code>sum = 0</code> rebind names the whole language relies on — subsequent <code>list("ab")</code> / <code>str(3)</code> calls explode with bewildering <code>TypeError: 'list' object is not callable</code>. If you inherit such code, <code>del list</code> restores the builtin. Linters (Ruff, Chapter 23) flag this automatically — one more reason to use them.</div>
+
+<h3>3.6 Type conversion: casting across the divides</h3>
+<p><strong>What.</strong> Conversion (<em>casting</em>) builds a <em>new object</em> of a target type from a source value: <code>int(x), float(x), str(x), bool(x), list(x)</code>. It never mutates the source (sources may be immutable anyway) — it <em>manufactures</em>.</p>
+<p><strong>Why explicit conversion exists.</strong> Strong typing (§3.4) refuses implicit leaps (<code>"5" + 5</code> → TypeError) because silent coercion hides bugs. Explicit casts force you to declare intent at every boundary — especially the <em>external-data boundary</em>, where everything arrives as strings (CSV fields, user input, JSON values) and must be converted deliberately, with failure handling (Chapter 14).</p>
+<div class="code-block"><div class="code-head">conversion rules + traps <button class="copy-btn">Copy</button></div><pre><code>print(int("42"), float("3.5"), str(99))  # 42 3.5 99 — the happy path
+print(int(3.9))      # 3 — TRUNCATES toward zero (not round! use round(3.9))
+print(int(-3.9))     # -3 — toward zero (math.floor gives -4)
+print(bool(0), bool(""), bool("False"))  # False False True(!) — non-empty str is truthy
+print(list("abc"))   # ['a', 'b', 'c'] — str is iterable (Ch. 6)
+# int("3.5") → ValueError! (int() won't parse decimals) — chain instead:
+print(int(float("3.5")))  # 3</code></pre><div class="out">42 3.5 99
+3
+-3
+False False True
+['a', 'b', 'c']
+3</div></div>
+<div class="callout warn"><strong class="t">⚠️ Conversion traps (all common in data work)</strong><code>int("3.5")</code> → ValueError (parse float first) · <code>int(None)</code> → TypeError, <code>float("abc")</code> → ValueError (validate-then-convert, Ch. 14–15) · <code>int(3.9)</code> truncates silently (rounding is <code>round()</code>) · <code>bool("False")</code> is <code>True</code> (any non-empty string!) — parse flags with explicit comparison (<code>s.strip().lower() == "true"</code>), never <code>bool(s)</code>.</div>
+<p><strong>📊 Data-Science connection.</strong> "Convert at the boundary" is the load-bearing rule of Chapters 15 and 25: the moment external strings enter your program, convert to <code>int/float/date</code> <em>once</em>, centrally, with error collection — then analyze clean typed data. Scattered conversions mean scattered crashes and silent corruption.</p>
+
+<h3>3.7 Unpacking, swapping, and augmented assignment (binding in action)</h3>
+<div class="code-block"><div class="code-head">binding idioms <button class="copy-btn">Copy</button></div><pre><code>a, b = 1, 2       # unpack: right side packs to tuple (1,2), then binds
+a, b = b, a       # SWAP: right side evaluated FIRST → (2,1), then bound. No temp!
+first, *rest = [1, 2, 3, 4]  # starred: first=1, rest=[2,3,4]
+print(a, b, first, rest)
+n = 10
+n += 5            # augmented:rebind to n+5 → 15 (for immutables: new object)
+print(n)
+lst = [1]
+alias = lst
+lst += [2]        # ⚠️ for LISTS: += mutates IN PLACE (alias sees it!) — unlike lst = lst + [2]
+print(lst, alias) # [1, 2] [1, 2]</code></pre><div class="out">2 1 1 [2, 3, 4]
+15
+[1, 2] [1, 2]</div></div>
+<p><strong>Why <code>+=</code> differs by type.</strong> Augmented assignment calls the in-place method if it exists (<code>list.__iadd__</code> extends <em>in place</em>) and falls back to <code>x = x + value</code> (rebinding) otherwise. So <code>+=</code> on ints/strings <em>rebinds</em> (new object), but on lists <em>mutates</em> (same object, aliases affected). This asymmetry is a genuine language wart — now you know exactly when each happens, and Chapter 5 revisits it with the full operator story.</p>
+
+<h3>3.8 Interview questions</h3>
+<details><summary>Q1: == vs is? When is 'is' correct?</summary><div class="inner"><code>==</code> compares values (via <code>__eq__</code>); <code>is</code> compares identity (same object in memory). <code>[1] == [1]</code> is True; <code>[1] is [1]</code> is False. <code>is</code> is correct for singletons — <code>is None</code> (always), <code>is True/False</code> (rarely). Never for numbers/strings (interning is an implementation detail).</div></details>
+<details><summary>Q2: Mutable vs immutable — define, exemplify, and explain why dict keys must be immutable.</summary><div class="inner">Immutable (int/str/tuple/frozenset/None) can't change in place — "changes" rebind to new objects. Mutable (list/dict/set) can — aliases observe it. Dicts hash keys to buckets; a key mutating after insertion would hash elsewhere, corrupting lookups. Hence hashability requires (deep) immutability.</div></details>
+<details><summary>Q3: Is Python statically or dynamically typed? Strongly or weakly? Trade-offs?</summary><div class="inner">Dynamically typed (names untyped; objects carry types checked at runtime) and strongly typed (no silent nonsense coercions — <code>"5"+5</code> raises). Trade-off: fast, flexible expression vs runtime-surfaced type errors; professionals compensate with tests, type hints + mypy, and boundary validation.</div></details>
+<details><summary>Q4: What does `x = y` do? What does `x = x + 1` do for an int vs `xs.append(1)` for a list?</summary><div class="inner"><code>x = y</code> binds <code>x</code> to y's object — no copy. <code>x = x + 1</code> on an int creates a new int and rebinds (old untouched). <code>xs.append(1)</code> mutates the existing list in place (no rebinding; all aliases see it). Draw the balloon diagram — interviewers love it.</div></details>
+<details><summary>Q5: Why is `bool("False")` True, and how do you parse boolean strings correctly?</summary><div class="inner">Truthiness of strings depends on emptiness, not content — any non-empty string is truthy. Parse explicitly: <code>s.strip().lower() in ("true", "1", "yes")</code>. Never <code>bool(user_string)</code>.</div></details>
+
+<h3>3.9 Exercises</h3>
+<div class="ex L1"><span class="pill">Level 1 · Understand</span><ol><li>Draw the balloon diagram for <code>a = [1]; b = a; c = [1]</code>. Predict all <code>==</code> and <code>is</code> pairs, then verify with code + <code>id()</code>.</li><li>Predict: <code>s = "hi"; print(id(s)); s += "!"; print(id(s))</code> — same or different id? Why? Repeat with a list + <code>append</code>. Explain the difference in one paragraph.</li><li>From memory, list 6 mutable and 8 immutable types. For each mutable one, name one in-place method.</li></ol></div>
+<div class="ex L2"><span class="pill">Level 2 · Apply</span><ol><li>Reproduce the <code>[row]*3</code> aliasing bug with <code>is</code>-proof, fix it with a comprehension, and prove independence with <code>is</code> again.</li><li>Write <code>safe_int(text)</code> returning the int or <code>None</code> for invalid input (use try/except — a Chapter 14 preview). Test: <code>"42", "3.5", "abc", "", None</code>. Explain each result.</li><li>Demonstrate <code>+=</code> rebinding (int) vs mutating (list) with <code>id()</code> before/after and an alias witness. Write the rule in your own words.</li></ol></div>
+<div class="ex L3"><span class="pill">Level 3 · Interview</span><ol><li>Explain why <code>[] is []</code> is False but <code>None is None</code> is True — then explain why <code>256 is 256</code> may be True while <code>10**3 is 1000</code> is False, and why relying on either is a bug. Deliver as a 60-second whiteboard answer.</li><li>Design a function <code>freeze(obj)</code> that converts a nested list/dict structure into an equal-but-immutable one (tuples/frozensets) so it can be a dict key. What breaks with cycles? (Preview: recursion, Ch. 11.)</li></ol></div>
+<h3>3.10 Mini-challenge 🏆</h3>
+<div class="ex L2"><span class="pill">Challenge</span><p><strong>Build <code>alias_detective.py</code>.</strong> Given any two names, report: (1) <code>==</code>?, (2) <code>is</code>?, (3) <code>id</code>s, (4) mutability class of the object(s), and (5) a "mutation test" — if mutable, copy the object, mutate the copy, and show whether the original changed (proving shared vs independent). Run it on 6 pairs of your choice (including <code>[1] vs [1]</code>, <code>"ab" vs "a"+"b"</code>, <code>None vs None</code>). If you can predict all 6 outcomes before running, you own this chapter.</p></div>
+<div class="callout good"><strong class="t">🏁 Chapter summary → next</strong><strong>Remember:</strong> names → objects; <code>=</code> binds, never copies · <code>is</code>/identity vs <code>==</code>/equality (None always <code>is</code>) · mutable mutates in place (aliases see it), immutable rebinds (new object) · names untyped, objects typed — dynamic but strong · convert explicitly at boundaries · never shadow builtins. <strong>Next:</strong> Chapter 4 tours every core data type — the actual objects your names will point at: numbers, text, nothingness, and the four great collections.</div>
+</div></section>

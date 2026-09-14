@@ -1,0 +1,285 @@
+<!-- CHAPTER 11 -->
+<section class="chapter" id="ch11">
+<div class="ch-head"><div class="ch-num">11</div><div><div class="kicker">Abstraction · deepest chapter</div><h2>Functions</h2></div><div class="ch-tools"><button class="icon-btn bm" title="Bookmark">☆</button><button class="icon-btn done" title="Mark complete">✓</button><span class="chev">▾</span></div></div>
+<div class="ch-body">
+<p><strong>What/why.</strong> A function is a <em>named, reusable, testable unit of logic</em>: inputs (parameters) go in, work happens in an isolated scope, an output (return value) comes out. Functions exist to <strong>kill duplication (DRY — Don't Repeat Yourself)</strong>, <strong>name ideas</strong> (a well-named call reads as English), <strong>isolate complexity</strong> (test/debug one thing at a time), and <strong>compose programs</strong> from trustworthy parts. Data science without functions is copy-pasted notebook chaos where a fixed bug resurrects in cell 34; with functions it becomes a <em>reusable analysis library</em> (Chapter 25). This is the deepest chapter because functions are the hinge of everything after it: scope (12), recursion/closures/decorators (here + 21), classes as function-bundles (18), testing (23), and every project.</p>
+<div class="diagram"><strong>Figure 11.1 — Anatomy of a definition and a call</strong><div class="flow"><div class="fstep">def mean(xs): … ← DEFINITION: creates a function object, binds the name. Body runs ZERO times.</div><div class="farrow">↓ call: mean([10, 20])</div><div class="fstep">arguments bound to parameters → fresh LOCAL frame pushed on the call stack</div><div class="farrow">↓ body executes (names resolve LEGB — Ch. 12)</div><div class="fstep">return value → frame destroyed → value lands at the call site, execution resumes</div></div></div>
+
+<h3>11.1 Define, call, return — and the None contract</h3>
+<p><strong>What.</strong> <code>def NAME(params):</code> + indented body + <code>return EXPR</code>. Calling (<code>NAME(args)</code>) runs the body with parameters bound to argument <em>objects</em> (references — §3.1, no copying). <code>return</code> <em>exits immediately</em> with a value; falling off the end (or bare <code>return</code>) returns <code>None</code>.</p>
+<div class="code-block"><div class="code-head">define + call + return, with the object lesson <button class="copy-btn">Copy</button></div><pre><code>def mean(xs):
+    """Return the arithmetic mean of a non-empty list."""
+    return sum(xs) / len(xs)
+
+print(mean([10, 20, 30]))  # 20.0 — the VALUE lands here
+print(mean.__name__, callable(mean))  # mean True — no parens = the OBJECT itself (address varies!)
+print(mean([10, 20, 30]) * 2)  # 40.0 — calls are EXPRESSIONS (nestable!)
+result = print("hi")       # print DISPLAYS 'hi' but RETURNS None
+print(result)              # None — display ≠ return ( §2.2's law, generalized)
+def silent(xs):
+    total = sum(xs)        # computes... and drops it (no return!)
+print(silent([1, 2]))      # None — falling off the end returns None</code></pre><div class="out">20.0
+mean True
+40.0
+hi
+None
+None</div></div>
+<p><strong>Step-by-step (<code>mean([10, 20, 30])</code>).</strong> ① The argument expression <code>[10, 20, 30]</code> evaluates to a list object. ② A new frame is pushed; parameter <code>xs</code> binds to that object (one reference — the list is <em>not</em> copied). ③ Body: <code>sum(xs)</code> → 60, <code>len(xs)</code> → 3, <code>60/3</code> → <code>20.0</code>. ④ <code>return 20.0</code>: frame destroyed, <code>20.0</code> substituted at the call site. ⑤ Outer <code>print</code> displays it. Total: definition ran 0 times until called; each call gets a <em>fresh, isolated</em> frame (local variables never leak between calls).</p>
+<p><strong>The return contract (professional law).</strong> <em>Return values; print at the edges.</em> A function that only <code>print</code>s gives the program nothing to compute with, test, or compose — its result evaporates into pixels. Structure: pure core functions <code>return</code> data; one thin outer layer (CLI <code>main()</code>, notebook cell) <code>print</code>s/displays. Every project in this book follows this shape — and Chapter 23's testability argument depends on it (you can't <code>assert</code> on printed pixels).</p>
+<div class="callout warn"><strong class="t">⚠️ Return traps</strong>Code after <code>return</code> is <em>dead</em> (unreachable — linters flag it) · <code>return</code> inside a loop exits the <em>whole function</em> (not just the loop — use it for "found it!" (§10.4), fear it when you meant <code>break</code>) · inconsistent returns (<code>return x</code> on one path, implicit None on another) force every caller to None-check — return one <em>type-shape</em> from all paths or raise (Ch. 14).</div>
+
+<h3>11.2 Parameters vs arguments: positional, keyword, defaults</h3>
+<p><strong>What.</strong> <strong>Parameters</strong> live in the <em>definition</em> (placeholders: <code>def train(model, epochs)</code>). <strong>Arguments</strong> live in the <em>call</em> (actual objects: <code>train("forest", 50)</code>). Binding is positional-or-keyword by default: pass by <em>order</em> (positional) or by <em>name</em> (keyword, any order). <strong>Defaults</strong> (<code>epochs=10</code>) make parameters optional — evaluated <em>once at <code>def</code> time</em> (this single fact causes §11.3's famous trap).</p>
+<div class="code-block"><div class="code-head">argument styles, completely <button class="copy-btn">Copy</button></div><pre><code>def train(model="linear", epochs=10, verbose=True):
+    return f"{model}: {epochs} epochs, verbose={verbose}"
+
+print(train())                        # all defaults
+print(train("forest"))                # positional (by order)
+print(train(epochs=50, model="mlp"))  # keyword (any order, self-documenting)
+print(train("mlp", verbose=False))    # mixed: positionals FIRST, then keywords
+# print(train(model="a", "b"))        # SyntaxError: positional after keyword!
+# print(train("a", "b", "c", "d"))    # TypeError: too many positional args
+# print(train(speed=5))               # TypeError: unexpected keyword 'speed'</code></pre><div class="out">linear: 10 epochs, verbose=True
+forest: 10 epochs, verbose=True
+mlp: 50 epochs, verbose=True
+mlp: 10 epochs, verbose=False</div></div>
+<p><strong>Rules (exact).</strong> In calls: all positionals before all keywords; each parameter bound at most once (<code>f(1, x=2)</code> with <code>def f(x)</code> → "multiple values for argument"). In definitions: non-default parameters before defaulted ones (<code>def f(a=1, b):</code> → SyntaxError). Keywords at call sites are <em>documentation that executes</em>: <code>dropna(inplace=True)</code> vs <code>dropna(True)</code> — the first is self-explaining; the second sends readers hunting.</p>
+<div class="callout bad"><strong class="t">🐍 The mutable-default trap (top-10 interview question)</strong><code>def f(xs=[]): xs.append(1); return xs</code> — the default list is created <strong>once</strong>, at <code>def</code> time, and <em>shared across all calls that omit it</em>: <code>f()</code> → <code>[1]</code>, then <code>f()</code> → <code>[1, 1]</code>. The function "remembers" — spooky, stateful, bug-breeding. <strong>Fix (memorize):</strong> <code>def f(xs=None): xs = [] if xs is None else xs</code> — fresh list per call. Generalize: defaults must be <em>immutable</em> (<code>None, 0, "", (), frozenset()</code>).</div>
+<div class="code-block"><div class="code-head">mutable default: the bug + the fix, side by side <button class="copy-btn">Copy</button></div><pre><code>def buggy(item, bag=[]):      # ❌ ONE list shared by all default-calls
+    bag.append(item)
+    return bag
+print(buggy("a"))  # ['a']
+print(buggy("b"))  # ['a', 'b'] — LEAKED across calls!
+
+def fixed(item, bag=None):    # ✅ fresh list per call
+    if bag is None:
+        bag = []
+    bag.append(item)
+    return bag
+print(fixed("a"))  # ['a']
+print(fixed("b"))  # ['b'] — independent ✓
+print(buggy.__defaults__)  # (['a', 'b'],) — the shared object, red-handed!</code></pre><div class="out">['a']
+['a', 'b']
+['a']
+['b']
+(['a', 'b'],)</div></div>
+
+<h3>11.3 *args and **kwargs: flexible signatures + call-site unpacking</h3>
+<p><strong>What.</strong> In definitions: <code>*args</code> collects extra <em>positional</em> arguments into a <strong>tuple</strong>; <code>**kwargs</code> collects extra <em>keyword</em> arguments into a <strong>dict</strong>. Parameters after <code>*args</code> become <strong>keyword-only</strong> (must be passed by name). In calls, <code>*</code>/<code>**</code> do the reverse: <em>unpack</em> a sequence/dict into separate arguments.</p>
+<div class="code-block"><div class="code-head">flexible signatures, completely <button class="copy-btn">Copy</button></div><pre><code>def report(title, *args, scale=1, **kwargs):
+    # title: required (positional-or-keyword)
+    # *args: extra positionals → TUPLE (possibly empty)
+    # scale: KEYWORD-ONLY (sits after *args — must pass scale=...)
+    # **kwargs: extra keywords → DICT
+    return {"title": title, "args": args, "scale": scale, "meta": kwargs}
+
+print(report("sales", 10, 20, scale=2, region="PK", q="Q1"))
+# Unpacking at CALL time:
+vals = [1, 2, 3]
+print(max(*vals))                 # max(1, 2, 3) → 3
+print(*vals, sep="-")            # 1-2-3 — print each element!
+cfg = {"sep": "-", "end": "!\n"}
+print("a", "b", **cfg)           # a-b! — dict unpacks to keywords
+merged = {**{"a": 1}, **{"b": 2}}  # {a:1, b:2} — dict merge via unpacking
+print(merged, [*vals, 4])        # [1,2,3,4] — list building via unpacking</code></pre><div class="out">{'title': 'sales', 'args': (10, 20), 'scale': 2, 'meta': {'region': 'PK', 'q': 'Q1'}}
+3
+1-2-3
+a-b!
+{'a': 1, 'b': 2} [1, 2, 3, 4]</div></div>
+<p><strong>When to use each.</strong> <code>*args/**kwargs</code>: <em>wrappers and decorators</em> (<code>def wrapper(*a, **k): …; return fn(*a, **k)</code> — forwards any signature, Chapter 21), <em>extensible APIs</em> (accept-and-forward options to a backend), <em>truly variadic functions</em> (<code>max()</code>, <code>print()</code>). Keyword-only (after <code>*</code>/<code>*args</code>): config/boolean flags that must be <em>named</em> (<code>sort(reverse=True)</code>-style clarity enforced). Bare <code>*</code> forces keyword-only with no variadics (<code>def f(a, *, b)</code>). Positional-only (<code>/</code>, 3.8+): library APIs whose parameter <em>names</em> aren't contractual (<code>def f(a, b, /, c)</code> — callers can't write <code>a=</code>).</p>
+<div class="code-block"><div class="code-head">keyword-only, bare *, positional-only <button class="copy-btn">Copy</button></div><pre><code>def strict(a, b, /, c, *, d):
+    # a, b: POSITIONAL-ONLY (before /) — f(a=1,...) → TypeError
+    # c: normal (either way)
+    # d: KEYWORD-ONLY (after *) — f(..., 4) positionally → TypeError
+    return (a, b, c, d)
+print(strict(1, 2, 3, d=4))     # ✓
+print(strict(1, 2, c=3, d=4))   # ✓
+# print(strict(a=1, b=2, c=3, d=4))  # TypeError: positional-only!
+def save(path, *, overwrite=False, encoding="utf-8"):  # bare * — flags must be named
+    return (path, overwrite, encoding)
+print(save("f.csv", overwrite=True))</code></pre><div class="out">(1, 2, 3, 4)
+(1, 2, 3, 4)
+('f.csv', True, 'utf-8')</div></div>
+
+<h3>11.4 Scope essentials, docstrings, and type hints</h3>
+<p><strong>Scope in one paragraph (full story: Chapter 12).</strong> Parameters and body-variables are <strong>local</strong>: born at call, dead at return, invisible outside. Reading a name searches Local → Enclosing → Global → Builtin (LEGB); <em>assigning</em> always binds locally unless declared <code>global/nonlocal</code>. Consequence: a function can't accidentally clobber your variables — and you can't "reach in" to grab its locals. Design through the signature: data enters via parameters, exits via <code>return</code> — nothing else crosses the boundary.</p>
+<p><strong>Docstrings (mandatory for non-trivial functions).</strong> The triple-quoted string as the body's first statement becomes <code>fn.__doc__</code> — shown by <code>help(fn)</code>, IDEs, and doc generators. Format: one-line summary, then Args/Returns/Raises as needed (Google/NumPy style — pick one per project).</p>
+<p><strong>Type hints (cheap, high-value documentation).</strong> <code>def pct(part: float, whole: float) -&gt; float:</code> — hints are <em>ignored at runtime</em> (zero cost, zero enforcement) but read by humans, IDEs (autocomplete, inline errors), and <code>mypy</code> (a static checker that finds type bugs <em>before</em> running). Hint all public signatures; hint locals only where unclear.</p>
+<div class="code-block"><div class="code-head">documented + hinted function (the professional shape) <button class="copy-btn">Copy</button></div><pre><code>def pct(part: float, whole: float) -&gt; float:
+    """Return part as a percentage of whole.
+
+    Args:
+        part: The portion (must be within [0, whole]).
+        whole: The total (must be non-zero).
+
+    Returns:
+        The percentage, e.g. pct(3, 4) == 75.0.
+
+    Raises:
+        ZeroDivisionError: if whole is 0.
+    """
+    return 100 * part / whole
+
+print(pct(3, 4))
+print(pct.__doc__.splitlines()[0])  # first line — tools show this
+help(pct)  # full beauty — try it in the REPL!
+from typing import get_type_hints
+print(get_type_hints(pct))  # {'part': float, 'whole': float, 'return': float}</code></pre><div class="out">75.0
+Return part as a percentage of whole.
+
+Help on function pct in module __main__:
+
+pct(part: float, whole: float) -&gt; float
+    Return part as a percentage of whole.
+...
+{'part': &lt;class 'float'&gt;, 'whole': &lt;class 'float'&gt;, 'return': &lt;class 'float'&gt;}</div></div>
+
+<h3>11.5 lambda: anonymous one-expression functions (and their limits)</h3>
+<p><strong>What.</strong> <code>lambda PARAMS: EXPRESSION</code> creates a function <em>object</em> with no name, whose body is a <em>single expression</em> (no statements, no annotations, auto-returned). Use: <em>throwaway callables</em> passed to <code>key=</code>, <code>map/filter/sorted</code>, callbacks, tiny dispatch.</p>
+<div class="code-block"><div class="code-head">lambda: right uses + the late-binding trap <button class="copy-btn">Copy</button></div><pre><code>users = [("Ali", 30), ("Zara", 25)]
+users.sort(key=lambda u: u[1])   # ✅ throwaway key — lambda's home turf
+print(users)
+print(sorted(["bb", "a", "ccc"], key=lambda s: (len(s), s)))  # tuple keys!
+# ✅ dispatch table of tiny ops:
+ops = {"add": lambda a, b: a + b, "mul": lambda a, b: a * b}
+print(ops["mul"](3, 4))  # 12
+# ❌ ANTI-PATTERNS:
+# square = lambda x: x**2   → use `def square(x): return x**2` (PEP 8: name it! no annotations, worse tracebacks)
+# THE late-binding trap: lambdas capture VARIABLES, not values!
+funcs = [lambda: i for i in range(3)]
+print([f() for f in funcs])  # [2, 2, 2] — NOT [0,1,2]! all share final i=2
+fixed = [lambda i=i: i for i in range(3)]  # default binds CURRENT value
+print([f() for f in fixed])  # [0, 1, 2] ✓</code></pre><div class="out">[('Zara', 25), ('Ali', 30)]
+['a', 'bb', 'ccc']
+12
+[2, 2, 2]
+[0, 1, 2]</div></div>
+<p><strong>Step-by-step (late binding).</strong> Each <code>lambda: i</code> stores a reference to the <em>variable</em> <code>i</code> (the loop's single binding — §10.5's leak!), not a snapshot. After the loop, <code>i == 2</code>; calling any lambda reads <code>i</code> <em>now</em> → 2, three times. The <code>i=i</code> default evaluates <em>at definition time</em> (per iteration), freezing each value. Same trap bites <code>def</code> closures in loops (§11.7) — one mechanism, both constructs.</p>
+
+<h3>11.6 Recursion: self-similar problems, base cases, and limits</h3>
+<p><strong>What.</strong> <em>Recursion</em> solves a problem by having the function call <em>itself</em> on a <em>smaller subproblem</em>, until reaching a <strong>base case</strong> solvable directly. Every recursion needs: (1) base case(s) that <em>stop</em>, (2) a recursive step that <em>shrinks</em> toward them, (3) combination of sub-results. Missing any → infinite recursion → <code>RecursionError</code> (CPython caps ~1000 frames — <code>sys.getrecursionlimit()</code>).</p>
+<p><strong>Intuition.</strong> Russian dolls with instructions: "to open doll N: open doll N−1, then handle your layer" — plus "doll 0: just hand over the prize" (base case). The call stack <em>is</em> the pile of half-opened dolls: each frame waits while deeper frames finish, then resumes. Trace any recursion as <em>down</em> (calls, shrinking) then <em>up</em> (returns, combining).</p>
+<div class="code-block"><div class="code-head">factorial: trace down, then up <button class="copy-btn">Copy</button></div><pre><code>def factorial(n):
+    print("  " * (5-n) + f"call fact({n})")
+    if n &lt;= 1:                       # BASE CASE — the stopper (without: RecursionError)
+        print("  " * (5-n) + "→ base: return 1")
+        return 1
+    sub = factorial(n - 1)            # SHRINK toward base
+    result = n * sub                  # COMBINE on the way up
+    print("  " * (5-n) + f"→ return {n}*{sub}={result}")
+    return result
+
+print("answer:", factorial(5))</code></pre><div class="out">call fact(5)
+  call fact(4)
+    call fact(3)
+      call fact(2)
+        call fact(1)
+        → base: return 1
+      → return 2*1=2
+    → return 3*2=6
+  → return 4*6=24
+→ return 5*24=120
+answer: 120</div></div>
+<p><strong>Multiple examples — where recursion shines vs flops:</strong></p>
+<div class="code-block"><div class="code-head">recursion: trees (great) vs naive fibonacci (terrible) <button class="copy-btn">Copy</button></div><pre><code># GREAT: nested structures (depth unknown, shape self-similar)
+def deep_sum(obj):
+    if isinstance(obj, (int, float)) and not isinstance(obj, bool):
+        return obj                      # base: a number
+    if isinstance(obj, (list, tuple, set)):
+        return sum(deep_sum(x) for x in obj)  # shrink: each element
+    if isinstance(obj, dict):
+        return sum(deep_sum(v) for v in obj.values())
+    return 0                            # base: anything else contributes 0
+print(deep_sum({"a": [1, 2, {"b": 3}], "c": (4,)}))  # 10
+
+# TERRIBLE: naive fibonacci — exponential recomputation!
+def fib(n):
+    return n if n &lt; 2 else fib(n-1) + fib(n-2)  # fib(30): ~2.7M calls!
+import functools
+@functools.lru_cache(maxsize=None)   # memoize: each n computed ONCE → O(n)!
+def fib_fast(n):
+    return n if n &lt; 2 else fib_fast(n-1) + fib_fast(n-2)
+print(fib_fast(100))  # instant (naive fib(100): longer than the universe)</code></pre><div class="out">10
+354224848179261915075</div></div>
+<p><strong>Recursion vs iteration (professional judgment).</strong> Use recursion when the <em>data is recursive</em> (trees, nested JSON, filesystems, grammars) — the code mirrors the shape. Use iteration for <em>linear repetition</em> (counting, scanning, accumulating) — no stack risk, less overhead, no limit. Python has <em>no tail-call optimization</em> (deliberately — tracebacks stay complete), so deep linear recursion always risks <code>RecursionError</code>; convert with an explicit stack list when depth is unbounded.</p>
+
+<h3>11.7 Closures: functions that remember their birthplace</h3>
+<p><strong>What.</strong> A <em>closure</em> is a function object bundled with references to the <em>enclosing scope's variables it uses</em> — even after the enclosing function has returned. Mechanism: inner <code>def</code> reads outer variables (LEGB's E); Python stores them in <code>fn.__closure__</code> cells. Writing to them needs <code>nonlocal</code> (else assignment makes a local — Chapter 12).</p>
+<div class="code-block"><div class="code-head">counter closure, dissected <button class="copy-btn">Copy</button></div><pre><code>def make_counter(step=1):
+    count = 0                       # enclosing variable — the closure's memory
+    def inc():
+        nonlocal count              # WITHOUT this: UnboundLocalError (assigns local!)
+        count += step               # write to the CAPTURED cell
+        return count
+    return inc                      # return the inner function (closure attached!)
+
+c1 = make_counter()                 # own cell: count=0
+c2 = make_counter(step=10)          # SEPARATE cell: independent memory!
+print(c1(), c1())                   # 1 2
+print(c2())                         # 10 — independent ✓
+print(c1.__closure__[0].cell_contents)  # 2 — peek at the captured cell!
+# Factory pattern: one template, many configured functions:
+def make_adder(n):
+    return lambda x: x + n           # each remembers its OWN n
+add5 = make_adder(5)
+print(add5(10))  # 15</code></pre><div class="out">1 2
+10
+2
+15</div></div>
+<p><strong>Step-by-step.</strong> <code>make_counter()</code> runs: frame created, <code>count = 0</code> bound, <code>inc</code> defined (capturing the <em>cell</em> for <code>count</code>, not a copy), frame "returns" — but the cell <em>survives</em>, referenced by the closure. Each <code>c1()</code> call: reads/writes the cell via <code>nonlocal</code>. <code>c2 = make_counter(10)</code> runs the factory <em>again</em> → fresh frame → fresh cell → fully independent counter. Closures are <em>stateful functions</em> — objects with one method, no class needed (Chapter 18 shows when to upgrade to classes).</p>
+<div class="callout warn"><strong class="t">⚠️ Closure traps</strong>Forgetting <code>nonlocal</code> on write → <code>UnboundLocalError</code> (read-before-local-assign). Loop-variable capture (§11.5's <code>[2,2,2]</code>) — defaults freeze values. Over-closure: capturing <em>large</em> objects keeps them alive as long as the closure lives (memory leak shape — capture only what you need, or use weakrefs).</div>
+
+<h3>11.8 Higher-order functions + decorators from first principles</h3>
+<p><strong>What.</strong> Functions are <em>objects</em> (§3.1): passable as arguments, returnable, storable in lists/dicts. A <em>higher-order function</em> takes or returns functions (<code>map, filter, sorted(key=…)</code>, and every decorator). A <em>decorator</em> is a higher-order function that takes a function and returns an <em>enhanced wrapper</em> — with <code>@name</code> as the rebinding syntax: <code>@d def f(…)</code> is <em>exactly</em> <code>f = d(f)</code> executed at definition time.</p>
+<div class="code-block"><div class="code-head">decorator from zero: no magic, just closures + rebinding <button class="copy-btn">Copy</button></div><pre><code>import functools
+
+def once(fn):
+    """Allow fn to run once; later calls get a message."""
+    done = False                          # closure memory (per-decorated-function!)
+    @functools.wraps(fn)                  # preserve __name__/__doc__ (ALWAYS!)
+    def wrapper(*args, **kwargs):         # accept ANY signature
+        nonlocal done
+        if done:
+            return "(already ran)"
+        done = True
+        return fn(*args, **kwargs)        # call THROUGH + return the result!
+    return wrapper
+
+@once                # greet = once(greet) — rebinds the NAME to the WRAPPER
+def greet(name):
+    """Say hello."""
+    return f"hello, {name}"
+
+print(greet("Ali"))   # hello, Ali (wrapper ran fn)
+print(greet("Zoe"))   # (already ran) (wrapper short-circuited)
+print(greet.__name__, "|", greet.__doc__)  # greet | Say hello. (wraps preserved!)</code></pre><div class="out">hello, Ali
+(already ran)
+greet | Say hello.</div></div>
+<p><strong>Step-by-step.</strong> At <code>def</code> time: <code>greet</code> (original) is passed to <code>once</code>, which builds <code>wrapper</code> (closure over <code>fn</code> + <code>done</code>) and <em>returns it</em>; the name <code>greet</code> is retied to the wrapper (original reachable only via <code>greet.__wrapped__</code>). At call time: your arguments hit <code>wrapper</code> → checks <code>done</code> → first call runs <code>fn(*a, **k)</code> and returns its result; later calls short-circuit. <code>functools.wraps</code> copies metadata so the wrapper <em>impersonates</em> the original (without it: <code>__name__ == "wrapper"</code>, doc lost, debuggers confused, stacked decorators degraded).</p>
+<p><strong>Three decorator rules (preview of Chapter 21's full treatment).</strong> ① Always <code>@functools.wraps(fn)</code>. ② Wrapper signature <code>(*args, **kwargs)</code> + <code>return fn(*args, **kwargs)</code> (forgetting <code>return</code> turns every decorated function into a None-machine!). ③ Decorators with arguments (<code>@retry(times=3)</code>) are <em>factories returning decorators</em> — one more nesting level. Builtins you already use that <em>are</em> decorators: <code>@property, @staticmethod, @classmethod</code> (Ch. 18), <code>@lru_cache</code> (§11.6), <code>@contextmanager</code> (Ch. 21).</p>
+
+<h3>11.9 Designing good functions (the craft rules)</h3>
+<ul>
+<li><strong>One job.</strong> If the name needs "and" (<code>load_and_clean_and_plot</code>), split it. Test: describe it in one sentence without "and".</li>
+<li><strong>Small.</strong> ~5–20 lines; fits on one screen. Long function = hidden sub-functions begging for names.</li>
+<li><strong>Few parameters.</strong> ≤ 3–4; bundle the rest into a dataclass/config/dict. Boolean params are a smell (the function does two things — split or keyword-only it).</li>
+<li><strong>Pure when possible.</strong> Same inputs → same output, no mutation, no I/O. Pure functions are trivially testable, composable, cacheable, parallelizable. Push impurity (I/O, randomness, time) to the edges.</li>
+<li><strong>Return, don't print</strong> (§11.1). <strong>Validate at boundaries, assert inside</strong> (user input → <code>if/raise</code>; internal invariants → <code>assert</code>; Ch. 14/22).</li>
+<li><strong>Name as contract:</strong> verb + object (<code>parse_date, total_revenue</code>), honest about effects (<code>get_or_create</code>, <code>ensure_dir</code>), no abbreviations the team must decode.</li>
+</ul>
+
+<h3>11.10 Interview questions</h3>
+<details><summary>Q1: Explain *args and **kwargs — both directions — with the wrapper use case.</summary><div class="inner">In definitions: <code>*args</code> gathers extra positionals (tuple), <code>**kwargs</code> extra keywords (dict); params after <code>*</code> are keyword-only. In calls: <code>*</code>/<code>**</code> unpack sequences/dicts into arguments. Canonical use: transparent wrappers — <code>def wrapper(*a, **k): log(); return fn(*a, **k)</code> — forwarding any signature (decorators, proxies, API evolution).</div></details>
+<details><summary>Q2: What happens with no return statement? Why is print not a substitute for return?</summary><div class="inner">The function returns <code>None</code>. <code>print</code> emits pixels for humans; <code>return</code> hands a value to the program for computation, testing (<code>assert f(x) == …</code>), and composition (<code>g(f(x))</code>). Print-instead-of-return yields untestable, unchainable code — return from cores, print at edges.</div></details>
+<details><summary>Q3: The mutable-default-argument trap: demo, root cause, fix.</summary><div class="inner">Demo: <code>def f(xs=[]): xs.append(1); return xs</code> → <code>[1]</code> then <code>[1,1]</code>. Cause: defaults evaluate once at <code>def</code> time; the list is shared (<code>fn.__defaults__</code> proves it). Fix: <code>xs=None</code> + build inside. Generalize: immutable defaults only.</div></details>
+<details><summary>Q4: What is a closure? What is nonlocal for? Give a use.</summary><div class="inner">A function bundled with its enclosing scope's referenced variables (cells surviving the outer return — <code>fn.__closure__</code>). <code>nonlocal</code> declares write-access to an enclosing (non-global) binding — without it, assignment creates a shadowing local (UnboundLocalError on read-first). Uses: counters, factories (<code>make_adder</code>), decorators (wrapper state like <code>done</code>/<code>cache</code>).</div></details>
+<details><summary>Q5: What does @decorator do, exactly? Why functools.wraps?</summary><div class="inner"><code>@d def f</code> ≡ <code>f = d(f)</code> at definition time: decorator receives the function object, returns (usually) a closure wrapper. <code>functools.wraps</code> copies <code>__name__/__doc__/__module__</code> (+ <code>__wrapped__</code>) so introspection, docs, tracebacks, and stacking keep working.</div></details>
+
+<h3>11.11 Exercises</h3>
+<div class="ex L1"><span class="pill">Level 1 · Understand</span><ol><li><code>area(w, h=1)</code>: call it 5 ways (positional, keyword, mixed, defaults, unpacked <code>*[3,4]</code>). Show the two illegal call shapes and their errors.</li><li>Demonstrate the mutable-default bug, inspect <code>__defaults__</code>, fix with <code>None</code>, and re-verify independence across 3 calls.</li><li>Annotate every line of §11.8's <code>@once</code>: where's the closure? the factory? what does each <code>nonlocal</code>/<code>wraps</code>/<code>return</code> do? Remove <code>wraps</code> and show what degrades.</li></ol></div>
+<div class="ex L2"><span class="pill">Level 2 · Apply</span><ol><li><code>clamp(x, lo=0, hi=1)</code> with docstring + hints + keyword-only bounds + 8 assert-tests (edges: lo==hi, x exactly on bounds, NaN behavior documented).</li><li><code>fib</code> recursive vs iterative vs <code>lru_cache</code>: time all three at n=30, count calls (counter closure!), explain the exponential→linear collapse.</li><li><code>make_averager()</code> closure (running mean without storing all values — hint: keep total+count via <code>nonlocal</code>). Prove two instances independent.</li></ol></div>
+<div class="ex L3"><span class="pill">Level 3 · Interview</span><ol><li><code>@timer</code> + <code>@retry(times, delay)</code> (factory!) + <code>@memoize</code> (hand-rolled dict cache): implement all three from scratch with <code>wraps</code>, stack them, and argue the correct stacking order with a probe experiment.</li><li>Implement <code>deep_map(fn, nested)</code> applying fn to every leaf of arbitrarily nested lists/tuples/dicts (recursion + closure counter of leaves visited). Handle cycles gracefully (seen-set of <code>id()</code>s — argue why).</li></ol></div>
+<h3>11.12 Mini-challenge 🏆</h3>
+<div class="ex L2"><span class="pill">Challenge</span><p><strong>Build <code>func_lab.py</code>.</strong> A single file demonstrating, with printed proof: args/kwargs both directions, keyword-only + positional-only enforcement (show the TypeErrors caught), mutable-default bug + fix, closure counter + adder factory, late-binding trap + fix, recursion trace of <code>fib(5)</code> (indented like §11.6), and a stacked <code>@timer @once</code> function. If every section runs green, you own functions — the hinge of the book.</p></div>
+<div class="callout good"><strong class="t">🏁 Chapter summary → next</strong><strong>Remember:</strong> define once (0 runs) → call (fresh frame) → return (frame dies, value lands) · return values, print at edges · params/args; positionals-before-keywords; immutable defaults (None-pattern!) · <code>*args/**kwargs</code> both directions; keyword-only flags, positional-only API armor · docstrings + hints on public code · lambda = throwaway expressions (late-binding!) · recursion = base + shrink + combine (iterate linear, recurse trees, memoize overlap) · closures = functions + captured cells (<code>nonlocal</code> to write) · decorators = <code>f = d(f)</code> + <code>wraps</code> + <code>return fn(*a, **k)</code>. <strong>Next:</strong> Chapter 12 — scope &amp; namespaces: exactly where Python looks up every name (LEGB), and why assignment makes locals.</div>
+</div></section>

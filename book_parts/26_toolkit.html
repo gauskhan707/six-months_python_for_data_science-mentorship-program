@@ -1,0 +1,38 @@
+<!-- TOOLKIT -->
+<section class="chapter" id="toolkit">
+<div class="ch-head"><div class="ch-num">🧰</div><div><div class="kicker">Orientation · no new libraries taught</div><h2>Your Data Science Toolkit</h2></div><div class="ch-tools"><button class="icon-btn bm" title="Bookmark">☆</button><button class="icon-btn done" title="Mark complete">✓</button><span class="chev">▾</span></div></div>
+<div class="ch-body">
+<p><strong>What/why.</strong> You've learned the <em>language</em>; this page maps the <em>profession's tools</em> — what each does, where it slots into the workflow (§25.2), which series Part teaches it deeply, and <strong>which Part-1 chapters it assumes</strong> (so every future struggle traces back to exact review material). Deliberately <em>orientation, not instruction</em>: names + roles + first commands only — depth lives in its Part. Bookmark this page; you'll return at every Part boundary.</p>
+
+<h3>T.1 The landscape (workflow order)</h3>
+<table><tr><th>Tool</th><th>Role (one line)</th><th>Workflow stage</th><th>Learn in</th><th>Needs Part-1</th></tr>
+<tr><td><strong>Jupyter / Colab</strong></td><td>Notebook loop: code + output + narrative per cell</td><td>Explore, communicate</td><td>Part 2 (first use)</td><td>Ch. 2 REPL thinking, 6/10/11</td></tr>
+<tr><td><strong>SQL</strong> (SQLite/Postgres)</td><td>Query/filter/join data where it lives</td><td>Get</td><td>Part 2</td><td>Logic (5/9), files (15), config (23)</td></tr>
+<tr><td><strong>Statistics</strong> (scipy/statsmodels)</td><td>Distributions, tests, uncertainty math</td><td>Explore, model</td><td>Part 2</td><td>Functions (11), floats (4), plots later</td></tr>
+<tr><td><strong>NumPy</strong></td><td>Vectorized n-d arrays (C-speed math)</td><td>Explore, model</td><td>Part 3</td><td>Indexing/slicing (7/10), Big-O (24), dtypes≈types (4)</td></tr>
+<tr><td><strong>pandas</strong></td><td>DataFrames: table ops (filter/group/merge/reshape)</td><td>Clean, explore</td><td>Part 3</td><td>Dicts/lists (7/8), strings (6), files (15), comprehensions (13)</td></tr>
+<tr><td><strong>Matplotlib / seaborn / plotly</strong></td><td>Static → statistical → interactive charts</td><td>Explore, communicate</td><td>Part 4</td><td>Strings (labels), loops (10), functions (11), files (15)</td></tr>
+<tr><td><strong>scikit-learn</strong></td><td>ML: preprocess → <code>fit/predict/score</code> estimators → validate</td><td>Model</td><td>Part 5</td><td>Classes (18!), seeds/splits (25), exceptions (14), perf (24)</td></tr>
+<tr><td><strong>PyTorch</strong></td><td>Deep learning: tensors + autograd + GPUs</td><td>Model (DL)</td><td>Part 6</td><td>OOP (18), modules (16), venvs (17), debugging (22)</td></tr>
+<tr><td><strong>NLP / LLMs</strong> (transformers, APIs)</td><td>Text: embeddings, prompting, RAG, agents</td><td>Model, deploy</td><td>Part 6</td><td>Strings (6!), files (15), JSON (15), logging (23), ethics of eval</td></tr>
+<tr><td><strong>Git / GitHub</strong></td><td>Version control + collaboration + portfolio</td><td>All (backbone)</td><td>Ongoing (start NOW)</td><td>CLI basics (Ch. 2/17), READMEs (23)</td></tr></table>
+
+<h3>T.2 First commands (taste only — mastery in its Part)</h3>
+<div class="code-block"><div class="code-head">orientation snippets: run, observe, move on <button class="copy-btn">Copy</button></div><pre><code># Jupyter: pip install notebook → jupyter notebook → new cell: 1 + 1 (Shift+Enter!)
+# SQL: SELECT city, COUNT(*) FROM users GROUP BY city;  (get aggregates WITHOUT Python loops!)
+# NumPy (pip install numpy — Part 3!):
+# import numpy as np
+# print(np.mean(np.array([1.0, 2.0, 3.0])))  →  2.0  (taste only — mastery in Part 3!)
+print("numpy: pip install numpy (Part 3!)")
+# pandas (pip install pandas): df.groupby("city")["age"].mean()  (Ch. 8 Counter, vectorized!)
+# sklearn: model.fit(X_train, y_train); model.score(X_test, y_test)  (Ch. 18 classes in action!)
+# git: git init → git add . → git commit -m "Part 1 project 1" → push (portfolio from DAY ONE!)</code></pre><div class="out">numpy: pip install numpy (Part 3!)</div></div>
+<p><strong>The dependency truth (§25.5's warning, sharpened).</strong> Every tool above <em>assumes</em> Part-1 fluency — pandas bugs are dict/mutation/type bugs; sklearn errors are shape/seed/contract bugs; notebook chaos is scope/state bugs. When a later Part confuses you, run the <strong>Part-1-first checklist</strong>: <em>mutation? (Ch. 3) · types? (4) · truthiness? (5) · strings? (6) · aliasing? (7) · key errors? (8) · guards? (9) · loop bounds? (10) · scope/defaults? (11/12) · exceptions swallowed? (14) · encoding? (15) · wrong env? (17) · shape assumptions? (25)</em> — 90% of "library bugs" die here.</p>
+
+<h3>T.3 Environment ladder (grow as Parts demand)</h3>
+<table><tr><th>Stage</th><th>Setup</th><th>When</th></tr>
+<tr><td>Now (Part 1–2)</td><td>Python 3.10+ · venv per project · pip + requirements · VS Code + Ruff · git</td><td>Ch. 17's discipline, starting today</td></tr>
+<tr><td>Part 3–4</td><td>+ Jupyter · NumPy/pandas/matplotlib pins · larger RAM awareness (§24.4)</td><td>First notebook + DataFrames</td></tr>
+<tr><td>Part 5–6</td><td>+ sklearn/torch (bigger envs!) · GPU/Colab option · experiment tracking (MLflow/Weights&Biases word-watch)</td><td>First models; runs get long/expensive</td></tr></table>
+<div class="callout good"><strong class="t">🏁 Toolkit summary → next</strong><strong>Remember:</strong> tools map to workflow stages (get→clean→explore→model→communicate) · every tool lists its Part-1 prerequisites (review targets, not shame!) · Part-1-first debugging forever (libraries surface YOUR Python bugs) · git + venv + pins from day one (portfolio + reproducibility compound). <strong>Next:</strong> Projects 1–5 — five graded builds turning chapters into proof.</div>
+</div></section>

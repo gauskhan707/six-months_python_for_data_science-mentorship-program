@@ -1,0 +1,143 @@
+<!-- CHAPTER 14 -->
+<section class="chapter" id="ch14">
+<div class="ch-head"><div class="ch-num">14</div><div><div class="kicker">Robustness</div><h2>Errors and Exception Handling</h2></div><div class="ch-tools"><button class="icon-btn bm" title="Bookmark">☆</button><button class="icon-btn done" title="Mark complete">✓</button><span class="chev">▾</span></div></div>
+<div class="ch-body">
+<p><strong>What/why.</strong> Three failure kinds stalk every program: <strong>syntax errors</strong> (broken grammar — nothing runs), <strong>runtime exceptions</strong> (valid grammar, impossible operation — the <code>ValueError/KeyError/FileNotFoundError</code> family), <strong>logic errors</strong> (runs fine, wrong answer — the dangerous ones, no exception to catch). Exceptions exist so <em>errors cannot be silently ignored</em>: unhandled, they crash loudly with a traceback pinpointing the failure; handled with <code>try/except</code>, they become <em>controlled branches</em> for the inevitable (dirty CSV cells, missing keys, dead network). Data work is exception-heavy by nature — this chapter is survival gear, and Chapter 22 builds the debugging workflow on top of it.</p>
+
+<h3>14.1 The failure taxonomy (know your enemy)</h3>
+<table><tr><th>Kind</th><th>Example</th><th>When detected</th><th>How you fight it</th></tr>
+<tr><td><strong>Syntax</strong></td><td><code>print("hi"</code>, bad indent</td><td>Parse time — <em>nothing</em> runs</td><td>Read the <code>SyntaxError</code> (check <em>above</em> the flagged line); editor highlighting</td></tr>
+<tr><td><strong>Runtime (exception)</strong></td><td><code>int("abc")</code>, <code>d[k]</code> missing, <code>open("nope")</code></td><td>Execution, at the line</td><td><code>try/except</code> (expected) or fix-the-bug (unexpected) — §14.2 decides</td></tr>
+<tr><td><strong>Logic</strong></td><td>Off-by-one mean, wrong branch, aliasing</td><td>Never automatically — wrong output</td><td>Tests (Ch. 23), asserts (Ch. 22), hand-traces, code review</td></tr></table>
+<p><strong>The critical judgment: bug vs condition.</strong> <em>Bugs</em> (your code is wrong: bad index math, None where a list was promised) must <strong>crash loudly</strong> — never catch-and-hide them, or corruption spreads silently. <em>Conditions</em> (the world is messy: user typed "abc", file vanished, row malformed) must be <strong>handled gracefully</strong> — validate, convert-or-collect-errors, retry, or report. Most exception misuse is catching bugs (hiding them) or crashing on conditions (fragility). Ask per <code>except</code>: "is this the world's fault (handle) or mine (fix)?"</p>
+<div class="code-block"><div class="code-head">the exception family you'll actually meet <button class="copy-btn">Copy</button></div><pre><code># Trigger each: know them by shape, not by list-memorizing
+errors = []
+try: int("abc")
+except ValueError as e: errors.append(f"ValueError: {e}")
+try: {}["k"]
+except KeyError as e: errors.append(f"KeyError: {e}")
+try: [][0]
+except IndexError as e: errors.append(f"IndexError: {e}")
+try: open("definitely_not_here_12345.txt")
+except FileNotFoundError as e: errors.append(f"FileNotFoundError: ...{str(e)[-30:]}")
+try: 1/0
+except ZeroDivisionError as e: errors.append(f"ZeroDivisionError: {e}")
+try: "a" + 1
+except TypeError as e: errors.append(f"TypeError: {e}")
+for line in errors: print(line)</code></pre><div class="out">ValueError: invalid literal for int() with base 10: 'abc'
+KeyError: 'k'
+IndexError: list index out of range
+FileNotFoundError: ...nitely_not_here_12345.txt'
+ZeroDivisionError: division by zero
+TypeError: can only concatenate str (not "int") to str</div></div>
+<p><strong>Hierarchy note (practical).</strong> All catchable errors derive from <code>Exception</code> (which derives from <code>BaseException</code> — home also to <code>KeyboardInterrupt/SystemExit/GeneratorExit</code>, which ordinary <code>except Exception</code> deliberately <em>doesn't</em> catch). Catch <em>specific</em> classes (<code>ValueError</code>, <code>FileNotFoundError</code>); <code>except Exception</code> is for top-level safety nets that <em>log + re-raise or exit</em> — never silent. Bare <code>except:</code> catches even Ctrl+C — banned (§14.5).</p>
+
+<h3>14.2 The full try anatomy: try / except / else / finally</h3>
+<div class="code-block"><div class="code-head">every clause, each justified <button class="copy-btn">Copy</button></div><pre><code>def safe_div(a, b):
+    try:
+        result = a / b            # RISKY LINES ONLY — keep this block tiny (one idea!)
+    except ZeroDivisionError:     # specific exception FIRST...
+        return "can't divide by zero"
+    except TypeError as e:        # ...`as e` captures details for messages/logging
+        return f"bad types: {e}"
+    else:
+        return result             # runs ONLY if NO exception — the SUCCESS path
+    finally:
+        pass                      # ALWAYS runs (cleanup) — `with` usually obsoletes it
+
+print(safe_div(10, 2), "|", safe_div(10, 0), "|", safe_div(10, "x"))
+# Multiple types, one handler: except (TypeError, ValueError) as e:
+# Handler ORDER matters: subclasses before parents (FileNotFoundError before OSError)!</code></pre><div class="out">5.0 | can't divide by zero | bad types: unsupported operand type(s) for /: 'int' and 'str'</div></div>
+<div class="diagram"><strong>Figure 14.1 — Exception flow (trace it!)</strong><div class="flow"><div class="fstep">try block runs, line by line</div><div class="farrow">↓ exception raised?</div><div class="fstep">YES → abandon try instantly → jump to FIRST matching except (subsequent try-lines SKIPPED) → else SKIPPED → finally runs</div><div class="farrow">· vs ·</div><div class="fstep">NO → skip ALL excepts → else runs (success path) → finally runs</div></div></div>
+<p><strong>Why <code>else</code> exists (not just style).</strong> Code in <code>else</code> runs on success but is <em>not protected</em> by the <code>except</code>s — so a bug in your success path <em>crashes loudly</em> instead of being mis-caught as the anticipated failure. Putting success code <em>inside</em> <code>try</code> widens the net: an unexpected error there gets mislabeled as the expected one (misdiagnosis!). Rule: <code>try</code> = the exact risky lines; <code>else</code> = what success enables.</p>
+<p><strong>Why <code>finally</code> is rare now.</strong> It guarantees cleanup (close/release) even across <code>return/break/exceptions</code> — but <code>with</code> statements (Ch. 15/21) package try/finally into readable one-liners (<code>with open(…) as f:</code>). Write raw <code>finally</code> only when no context manager exists for your resource (then consider writing one — Ch. 21).</p>
+<div class="callout warn"><strong class="t">⚠️ Handler order + width</strong>Handlers test top-down; put <em>subclasses before parents</em> (<code>FileNotFoundError</code> before <code>OSError</code> — else the parent swallows everything and the child is dead code). Keep <code>try</code> blocks to <em>one idea / few lines</em> — a 30-line try means you can't tell which line failed, and you'll catch errors you never anticipated from lines you never suspected.</div>
+
+<h3>14.3 raise: failing loudly and helpfully + exception chaining</h3>
+<p><strong>What.</strong> <code>raise ValueError("age must be ≥ 0")</code> throws an exception <em>now</em> — for validation ("caller broke the contract"), impossible states ("this should never happen"), and re-throwing with context. Bare <code>raise</code> (inside <code>except</code>) re-raises the <em>current</em> exception, preserving its traceback — the only correct re-throw.</p>
+<div class="code-block"><div class="code-head">raise patterns: validate, re-raise, chain, suppress-context <button class="copy-btn">Copy</button></div><pre><code>def set_age(age):
+    if not isinstance(age, int) or isinstance(age, bool):
+        raise TypeError(f"age must be int, got {type(age).__name__}")  # contract!
+    if age &lt; 0:
+        raise ValueError(f"age must be ≥ 0, got {age}")                # message = data!
+    return age
+
+for bad in ["x", -5]:
+    try:
+        set_age(bad)
+    except (TypeError, ValueError) as e:
+        print("rejected:", e)
+
+# Translate low-level errors into DOMAIN errors (with chaining):
+def load_config(path):
+    try:
+        return open(path, encoding="utf-8").read()
+    except FileNotFoundError as e:
+        raise RuntimeError(f"missing config: {path}") from e  # `from e`: chain (both tracebacks!)
+# `raise ... from None`: deliberate translation, hide the low-level cause (use sparingly)</code></pre><div class="out">rejected: age must be int, got str
+rejected: age must be ≥ 0, got -5</div></div>
+<p><strong>Message craft (matters enormously).</strong> Include: <em>what was expected, what arrived, and where</em> — <code>f"age must be ≥ 0, got {age}"</code> beats <code>"invalid age"</code> beats <code>"error"</code>. Future-you debugs at 2 AM from these strings alone — write them generously. Include values with <code>!r</code> when whitespace/type confusion is plausible (<code>f"expected int, got {age!r}"</code>).</p>
+
+<h3>14.4 Custom exceptions + EAFP vs LBYL</h3>
+<p><strong>What.</strong> Custom exceptions (<code>class DataError(ValueError): …</code>) name <em>domain failures</em> — catchable precisely, self-documenting, and carrying structured context (row numbers, field names). Derive from the closest builtin (<code>ValueError</code> for bad values, <code>RuntimeError</code> for state problems, <code>Exception</code> + a project-base-class for hierarchies) so generic handlers still work.</p>
+<div class="code-block"><div class="code-head">domain exceptions + EAFP parsing <button class="copy-btn">Copy</button></div><pre><code>class DataError(ValueError):
+    """A dataset row failed validation (carries row + reason)."""
+    def __init__(self, row_no, reason):
+        super().__init__(f"row {row_no}: {reason}")
+        self.row_no, self.reason = row_no, reason
+
+def parse_age(text, row_no):
+    try:
+        age = int(str(text).strip())       # EAFP: TRY first...
+    except (TypeError, ValueError):        # ...handle failure (one place, all causes)
+        raise DataError(row_no, f"bad age {text!r}") from None
+    if not 0 &lt;= age &lt;= 120:
+        raise DataError(row_no, f"age {age} out of range")
+    return age
+
+rows = ["30", "abc", "999", None]
+good, problems = [], []
+for i, t in enumerate(rows):
+    try:
+        good.append(parse_age(t, i))
+    except DataError as e:                # collect-and-continue (never crash the batch!)
+        problems.append(str(e))
+print("good:", good)
+print("problems:", problems)</code></pre><div class="out">good: [30]
+problems: ["row 1: bad age 'abc'", 'row 2: age 999 out of range', 'row 3: bad age None']</div></div>
+<p><strong>EAFP</strong> (<em>Easier to Ask Forgiveness than Permission</em> — try, catch) vs <strong>LBYL</strong> (<em>Look Before You Leap</em> — <code>if</code>-check, then act). EAFP wins by default: <em>atomic</em> (check-then-act races: file deleted between <code>exists()</code> and <code>open()</code>), <em>complete</em> (one handler covers all failure modes, not just the ones you foresaw), <em>fast in the common case</em> (no double lookup: <code>d[k]</code> once vs <code>k in d</code> + <code>d[k]</code>). LBYL fits when: the check is cheap and failure is <em>routine control flow</em> (<code>if not rows: return []</code>), or exceptions would be obscenely frequent (tight loops where 99% fail — measure first!).</p>
+<div class="callout good"><strong class="t">✅ The collect-and-continue pattern (data pipelines live here)</strong>Batch jobs must <em>never</em> die on row 9,000,001: wrap per-item work in try/except, append successes, collect <code>(row_no, error)</code> failures, and report counts at the end. Distinguish <em>fatal</em> (schema wrong, file missing — abort) from <em>row-local</em> (bad cell — collect). Chapters 15/25 and every project implement exactly this.</div>
+
+<h3>14.5 The bans (never do these) + logging errors</h3>
+<div class="callout bad"><strong class="t">🚫 Banned patterns (each with its horror story)</strong>① Bare <code>except:</code> — catches <code>KeyboardInterrupt</code>/Ctrl+C (un-killable programs!) and hides everything. Always name the class. ② <code>except Exception: pass</code> — silent data corruption: the #1 worst bug shape in data science (rows vanish, means drift, nobody knows). Log or count, <em>always</em>. ③ <code>except Exception as e: print(e)</code> and continue as if fine — same silence, plus stdout noise. ④ Catching to <code>return None</code> indistinguishably (caller can't tell "missing" from "broken" — raise or use sentinel types). ⑤ 30-line <code>try</code> blocks (which line failed? unknowable).</div>
+<div class="code-block"><div class="code-head">log, don't print, errors (preview of Ch. 23 done right) <button class="copy-btn">Copy</button></div><pre><code>import logging
+logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+log = logging.getLogger("demo")
+
+def robust_int(text):
+    try:
+        return int(str(text).strip())
+    except (TypeError, ValueError):
+        log.warning("unparseable int %r — using None", text)  # lazy args, level, logger name
+        return None  # documented choice: caller handles None (vs raise — pick per contract!)
+
+print(robust_int("42"), robust_int("abc"))</code></pre><div class="out">WARNING: unparseable int 'abc' — using None
+42 None</div></div>
+
+<h3>14.6 Debugging with exceptions (bridge to Chapter 22)</h3>
+<p>Exceptions <em>are</em> the debugger's raw material: the <strong>last traceback line</strong> names the failure, frames above locate it, and <code>as e</code> carries the evidence. Workflow preview: reproduce minimally → read bottom-up → inspect the <code>raise</code>-site values → decide bug-vs-condition (§14.1) → fix or handle → add a regression test proving it stays fixed (Ch. 23). Two power tools: <code>traceback.print_exc()</code> (dump current traceback anywhere — log it, don't lose it) and post-mortem <code>python -m pdb script.py</code> (inspect the corpse — Ch. 22).</p>
+
+<h3>14.7 Interview questions</h3>
+<details><summary>Q1: try/except/else/finally — what goes where, and why does else exist?</summary><div class="inner"><code>try</code>: only the lines that may raise the caught exception (one idea, few lines). <code>except</code>: narrow, specific handlers, subclasses first. <code>else</code>: success-path code — runs only without exception AND unprotected, so success-path bugs crash loudly instead of being mis-caught. <code>finally</code>: guaranteed cleanup — usually replaced by <code>with</code>.</div></details>
+<details><summary>Q2: EAFP vs LBYL — define, compare, and say when each wins.</summary><div class="inner">EAFP: try first, handle failure — atomic (no check-act race), complete (all failure modes), single lookup. LBYL: check then act — two lookups, races in file/threaded code. EAFP default (dicts, casts, files); LBYL when checks are cheap and failure is routine flow, or exceptions would dominate hot loops (measure!).</div></details>
+<details><summary>Q3: What's wrong with `except: pass` and `except Exception: return None`?</summary><div class="inner">Bare <code>except:</code> catches even KeyboardInterrupt/SystemExit and hides all evidence. <code>pass</code>/silent-None converts failures into silent corruption (missing rows, wrong stats) — the costliest bug shape. Always: narrowest class + log/count + recover, retry, or re-raise with context.</div></details>
+<details><summary>Q4: How do you design exceptions for a data pipeline?</summary><div class="inner">Hierarchy: project base (<code>PipelineError(Exception)</code>) → <code>SourceError</code> (fatal: abort), <code>SchemaError</code> (fatal), <code>RowError</code> (collect-and-continue with row_no). Raise domain errors with rich messages (expected/got/where); chain low-level causes (<code>from e</code>); top level logs + exit code. Show §14.4's collect loop.</div></details>
+
+<h3>14.8 Exercises</h3>
+<div class="ex L1"><span class="pill">Level 1 · Understand</span><ol><li>Classify 8 failures (SyntaxError, KeyError, ZeroDivisionError, FileNotFoundError, off-by-one mean, unclosed bracket, <code>int(None)</code>, silently skipped rows) as syntax/runtime/logic + bug-vs-condition.</li><li>Write one try/except/else/finally where each clause prints its name; drive all three paths (success, caught, uncaught-with-finally) and narrate the flow.</li><li>Trigger the 6 exceptions in §14.1's table; for each, write the narrowest handler + a helpful message.</li></ol></div>
+<div class="ex L2"><span class="pill">Level 2 · Apply</span><ol><li><code>robust_ints(texts)</code>: convert a list, collecting <code>(index, raw, error)</code> for failures without stopping; return <code>(values, problems)</code> + log a summary.</li><li><code>retry(fn, times=3, delay=0)</code>: re-call on <code>Exception</code> subclasses you name, sleep between tries, re-raise the <em>last</em> error after exhaustion (preserve traceback!).</li><li>Convert an LBYL file-reader (<code>exists()</code> then <code>open()</code>) to EAFP; articulate the race you closed.</li></ol></div>
+<div class="ex L3"><span class="pill">Level 3 · Interview</span><ol><li>Design + implement the §14.7-Q4 pipeline hierarchy with raising/catching at correct levels; write a test per level proving fatal-abort vs collect-continue behavior.</li><li>Audit a past project for banned patterns (§14.5); fix each with before/after + a one-line justification a reviewer would accept.</li></ol></div>
+<h3>14.9 Mini-challenge 🏆</h3>
+<div class="ex L2"><span class="pill">Challenge</span><p><strong>Build <code>hardened_loader.py</code>.</strong> Load a deliberately filthy CSV (bad ints, missing columns, blank lines, wrong encoding attempts): implement <code>SchemaError</code> (fatal: missing required columns → abort with message) + <code>RowError</code> (collect: bad cells → counted, reported, skipped) + encoding fallback (utf-8 → cp1252, logged) + a final report (<code>loaded X, skipped Y (reasons...), encoding Z</code>). Crash on nothing row-local; abort loudly on schema failure. This is Chapter 25's loader core.</p></div>
+<div class="callout good"><strong class="t">🏁 Chapter summary → next</strong><strong>Remember:</strong> syntax/runtime/logic + bug-vs-condition judgment · tiny <code>try</code> + narrow ordered <code>except</code>s + <code>else</code>-success + <code>finally</code>-cleanup (usually <code>with</code>) · <code>raise</code> with rich messages; bare <code>raise</code> re-throws; <code>from e</code> chains · custom domain exceptions (fatal vs collectible) · EAFP default, LBYL for cheap routine checks · never bare-<code>except</code>/silent-<code>pass</code> (log + count, always). <strong>Next:</strong> Chapter 15 — files &amp; data at full depth: the I/O boundary done professionally (text/CSV/JSON/paths/encodings/streaming).</div>
+</div></section>

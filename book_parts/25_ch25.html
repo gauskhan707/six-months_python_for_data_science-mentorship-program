@@ -1,0 +1,105 @@
+<!-- CHAPTER 25 -->
+<section class="chapter" id="ch25">
+<div class="ch-head"><div class="ch-num">25</div><div><div class="kicker">Bridge</div><h2>Python for Data Science</h2></div><div class="ch-tools"><button class="icon-btn bm" title="Bookmark">☆</button><button class="icon-btn done" title="Mark complete">✓</button><span class="chev">▾</span></div></div>
+<div class="ch-body">
+<p><strong>What/why.</strong> This chapter is the <strong>bridge</strong>: 24 chapters of <em>language</em> become the <em>profession</em>. Python won data science for concrete reasons (readable glue + C-speed libraries + notebooks + ecosystem), and every chapter maps to daily DS work: files→ingestion, dicts→records, exceptions→dirty data, functions→pipelines, OOP→components, performance→scale. No NumPy/pandas/ML teaching here (Parts 2–6!) — instead: <em>why Python</em>, the <em>workflow map</em>, <em>chapter-to-job links</em>, pure-Python <em>DS patterns</em> (profiling, cleaning, splitting, seeding, timing), and the <em>series roadmap</em>. Read this, and Part 1's purpose snaps into one picture.</p>
+
+<h3>25.1 Why Python won data science (structural reasons, not hype)</h3>
+<table><tr><th>Reason</th><th>Mechanism</th><th>Evidence</th></tr>
+<tr><td>Readable glue</td><td>Simple syntax + batteries-included → analysts AND engineers share one language</td><td>Notebook-to-production path exists (prototype Friday, pipeline Monday)</td></tr>
+<tr><td>C-speed libraries</td><td>NumPy/pandas/scikit-learn: Python API over C/Fortran kernels (Ch. 24's ladder!)</td><td>Python UX at ~C speed for array/table/model ops</td></tr>
+<tr><td>Notebook loop</td><td>Jupyter: code + output + narrative in cells (REPL thinking at scale — §2.6)</td><td>Exploration, teaching, reporting share one artifact</td></tr>
+<tr><td>Ecosystem gravity</td><td>Every dataset/API/model ships Python-first (pip-installable — Ch. 17)</td><td>New papers ship <code>.py</code>; Kaggle/Colab default Python</td></tr>
+<tr><td>General-purpose</td><td>Same language scrapes, cleans, serves, automates (web/APIs/DBs/DevOps)</td><td>No handoffs between "analysis" and "engineering" languages</td></tr></table>
+<p><strong>The honest limits (know them!).</strong> Raw Python loops are slow (→ vectorize, Part 3); the GIL shapes parallelism (→ processes/C-extensions, §24.5); dynamic typing needs discipline (→ hints/tests, Ch. 23); R/Julia/SQL/Spark win niches (stats DSLs, HPC, queries, clusters — polyglot teams are normal). Python's moat is <em>breadth × readability × libraries</em>, not any single benchmark.</p>
+
+<h3>25.2 The data-science workflow (where Part 1 lives in it)</h3>
+<div class="diagram"><strong>Figure 25.1 — Workflow stages and their Part-1 foundations</strong><div class="flow"><div class="fstep">ASK (question → measurable target; config it — Ch. 23)</div><div class="farrow">↓</div><div class="fstep">GET (files/APIs/DBs → ingestion: open/csv/json/pathlib — Ch. 15, requests later)</div><div class="farrow">↓</div><div class="fstep">CLEAN (missing/dupes/types/outliers → pure functions + exceptions — Ch. 11/14)</div><div class="farrow">↓</div><div class="fstep">EXPLORE (profile/distributions/relations → Counter/stats/loops — Ch. 7/8/10)</div><div class="farrow">↓</div><div class="fstep">MODEL (features/train/eval → functions/classes/seeded splits — Ch. 11/18/25.4)</div><div class="farrow">↓</div><div class="fstep">COMMUNICATE (plots/reports/notebooks → f-strings/files — Ch. 6/15) → DEPLOY (venv/requirements/logging — Ch. 17/23)</div></div></div>
+<p><strong>Part 1's share.</strong> Roughly <em>half</em> of professional DS time is Python-fundamentals work (ingestion, cleaning, validation, plumbing, automation) — done with <em>exactly</em> this book's tools. Parts 2–6 add the specialized layers (SQL/stats → NumPy/pandas → visualization → ML → DL/NLP/LLMs) — each <em>assumes fluency here</em> (a pandas bug is usually a Python bug: aliasing, mutation, types, scope!). Projects 1–5 rehearse the workflow's Python core end-to-end.</p>
+
+<h3>25.3 Chapter-to-job map (every chapter's DS paycheck)</h3>
+<table><tr><th>Ch</th><th>DS daily use</th><th>Concrete moment</th></tr>
+<tr><td>3–5 (objects/ops)</td><td>Correct numeric/boolean logic</td><td>Float-safe comparisons, truthiness filters, precedence in formulas</td></tr>
+<tr><td>6 (strings)</td><td>Text wrangling</td><td>Normalize emails/categories, parse logs, build reports/filenames</td></tr>
+<tr><td>7–8 (collections)</td><td>Records, groups, dedupe</td><td>Dicts-as-rows, Counter distributions, set dedupe/joins</td></tr>
+<tr><td>9–10 (control)</td><td>Branching, iteration, search</td><td>Guards, banding, early-exit scans, loop→(later)→vectorization</td></tr>
+<tr><td>11–13 (functions)</td><td>Pipelines, transforms</td><td>Pure stages, closures/counters, comprehensions as filters/maps</td></tr>
+<tr><td>14 (errors)</td><td>Dirty data survival</td><td>Per-row try/except, quarantine+log, narrow excepts, custom DataErrors</td></tr>
+<tr><td>15 (files)</td><td>Ingestion/outputs</td><td>Streaming CSV/JSON, encodings, atomic writes, pathlib, JSONL</td></tr>
+<tr><td>16–17 (modules/envs)</td><td>Reproducibility</td><td>Packages, <code>__main__</code> scripts, venvs, frozen requirements</td></tr>
+<tr><td>18 (OOP)</td><td>Components</td><td>Dataset/transformer/model classes, dataclasses as schemas, sklearn's API shape</td></tr>
+<tr><td>19–20 (lazy/functional)</td><td>Scale + clarity</td><td>Generator pipelines (O(1)), any/all gates, itertools, operator</td></tr>
+<tr><td>21 (patterns)</td><td>Reliability</td><td>Retries, timing, transactions, resource guarantees</td></tr>
+<tr><td>22–24 (craft/perf)</td><td>Professionalism + scale</td><td>Debug workflow, logging/tests, Big-O + vectorize + stream</td></tr></table>
+
+<h3>25.4 Pure-Python DS patterns (profiling · cleaning · splits · seeding)</h3>
+<div class="code-block"><div class="code-head">profile + clean + split + seed (stdlib only!) <button class="copy-btn">Copy</button></div><pre><code>import csv, json, random
+from collections import Counter
+
+random.seed(42)                       # REPRODUCIBILITY: seed ONCE at program start (log it!)
+print("seed: 42 (log seeds with results — unseeded runs are unrepeatable!)")
+
+rows = [
+    {"id": "1", "age": "30", "city": "Pune"},
+    {"id": "2", "age": "", "city": "  pune "},     # missing age, messy city
+    {"id": "3", "age": "abc", "city": "Mumbai"},   # bad age
+    {"id": "1", "age": "30", "city": "Pune"},      # DUPLICATE
+]
+# CLEAN: pure per-row (None = reject-with-reason; §14.5 quarantine idea):
+def clean(row):
+    age = row["age"].strip()
+    if not age:
+        return None, "missing age"
+    try:
+        age_i = int(age)
+    except ValueError:
+        return None, f"bad age {age!r}"
+    if not 0 &lt;= age_i &lt;= 120:
+        return None, f"age {age_i} out of range"
+    return {"id": row["id"], "age": age_i, "city": row["city"].strip().title()}, None
+
+cleaned, rejects = [], []
+for i, r in enumerate(rows):
+    good, why = clean(r)
+    (cleaned if good else rejects).append(good or {"row": i, "why": why})
+seen, deduped = set(), []             # DEDUPE by key (set-membership — §24.2!)
+for r in cleaned:
+    key = (r["id"], r["age"], r["city"])
+    if key not in seen:
+        seen.add(key)
+        deduped.append(r)
+# PROFILE: shape + missing + distributions (Counter — §8.3!):
+print("clean:", len(deduped), "| rejected:", len(rejects), "| reasons:", Counter(x["why"] for x in rejects))
+print("cities:", Counter(r["city"] for r in deduped))
+# SPLIT: seeded shuffle → train/test (deterministic!):
+random.shuffle(deduped)
+cut = int(0.7 * len(deduped)) or 1
+train, test = deduped[:cut], deduped[cut:]
+print("train/test:", len(train), len(test))</code></pre><div class="out">seed: 42 (log seeds with results — unseeded runs are unrepeatable!)
+clean: 1 | rejected: 2 | reasons: Counter({'missing age': 1, "bad age 'abc'": 1})
+cities: Counter({'Pune': 1})
+train/test: 1 0</div></div>
+<p><strong>Pattern notes.</strong> <em>Seeding:</em> one <code>random.seed(N)</code> (logged!) makes shuffles/splits repeatable — papers/pipelines record seeds as first-class config (NumPy/sklearn: <code>random_state=42</code> — same idea, later parts). <em>Cleaning:</em> pure per-row + reject-with-reason (never silent drops — counts + reasons logged!). <em>Dedupe:</em> key-tuples + set (O(n), §24.2). <em>Splits:</em> shuffle-then-cut at minimum (stratified/grouped splits in ML parts). Tiny here — the <em>shapes</em> scale to millions (stream §19.5 + validate §14.5 + log §23.3).</p>
+
+<h3>25.5 Series roadmap: Parts 2–6 (what each adds, what each assumes)</h3>
+<table><tr><th>Part</th><th>Adds</th><th>Assumes from Part 1</th></tr>
+<tr><td>2 · SQL + Statistics</td><td>Queries/joins; distributions, testing, experiment math</td><td>Logic, functions, files, config (query → analyze → report loops)</td></tr>
+<tr><td>3 · NumPy + pandas</td><td>Vectorized arrays/frames; groupby/merge/reshape at speed</td><td>Indexing/slicing, comprehensions, Big-O, memory shapes, methods-vs-functions</td></tr>
+<tr><td>4 · Visualization + EDA</td><td>Matplotlib/seaborn/plotly; honest, readable charts</td><td>Strings (labels), loops, functions, files, dicts-as-records</td></tr>
+<tr><td>5 · Machine Learning</td><td>sklearn: features, models, validation, tuning, pipelines</td><td>Classes (estimators!), exceptions, seeds/splits, logging, testing, perf</td></tr>
+<tr><td>6 · DL + NLP + LLMs</td><td>PyTorch, transformers, embeddings, prompting/RAG, agents</td><td>Everything: venvs, modules, OOP, decorators, CMs, profiling, testing</td></tr></table>
+<p><strong>How to carry Part 1 forward.</strong> Keep the workflows (debug loop §22, review checklist §23.7, pure-core/shell §20.5/23, streaming §19.5) — they're <em>part-independent</em>. When stuck in later parts, suspect Part-1 causes first (mutation? scope? types? encoding? env? — the strategy table §22.5 never expires). The Toolkit + Projects + Checkpoint next turn this chapter's map into <em>logged hours</em>.</p>
+
+<h3>25.6 Interview questions</h3>
+<details><summary>Q1: Why is Python dominant in data science — structurally?</summary><div class="inner">Five structural causes (§25.1): readable glue shared by analysts+engineers (notebook-to-production path), C-speed libraries (Python UX at kernel speed), notebook iteration loop, ecosystem gravity (datasets/APIs/models ship Python-first), general-purpose coverage (scraping→serving in one language). Plus honest limits (loop speed→vectorize, GIL→processes, typing discipline) — seniors name trade-offs, not just wins.</div></details>
+<details><summary>Q2: Map the DS workflow to Python skills — where does "basic Python" end and DS begin?</summary><div class="inner">It doesn't — ~half of DS time IS fundamentals (ingestion/cleaning/validation/plumbing per §25.2–25.3). Walk the workflow: ask(config)→get(files/APIs)→clean(pure+exceptions)→explore(collections/stats)→model(classes/seeds)→communicate(strings/files)→deploy(venvs/logging) — each stage's Python core from this book, each later Part adding its specialized layer.</div></details>
+<details><summary>Q3: Seeding, splits, and reject-with-reason — why do these three matter?</summary><div class="inner">Seeding: repeatability (logged seed → identical shuffles/splits; unseeded = unrepeatable science). Splits: honest evaluation (test unseen; shuffle-then-cut minimum; stratified later). Reject-with-reason: data integrity (counts+reasons logged, quarantine inspectable — silent drops corrupt silently). Demo §25.4's pattern from memory.</div></details>
+
+<h3>25.7 Exercises</h3>
+<div class="ex L1"><span class="pill">Level 1 · Understand</span><ol><li>Explain each §25.1 reason to a non-programmer (one paragraph each) + one honest limit with its mitigation.</li><li>Draw Figure 25.1 from memory; annotate each stage with its chapters; place your 5 projects on it.</li><li>Run §25.4's pipeline by hand on 6 new messy rows; predict every output line before running.</li></ol></div>
+<div class="ex L2"><span class="pill">Level 2 · Apply</span><ol><li>Extend §25.4: email normalization (Ch. 6), age banding (Ch. 9), mode/median (Ch. 8/10), per-reason log lines (Ch. 23) — stdlib only, tested.</li><li>Write the "Part-1-first debugging" checklist: 10 checks mapping later-Part symptoms to Part-1 causes (mutation/scope/types/encoding/env…).</li><li>Seed-sensitivity demo: same split code, 5 seeds → 5 train/test sizes on small N; explain why seed-logging is non-negotiable.</li></ol></div>
+<div class="ex L3"><span class="pill">Level 3 · Interview</span><ol><li>"Convince a skeptic: Python for a 10M-row nightly pipeline" — architecture memo (streaming/stdlib stages/vectorize-later/processes/logging) with Big-O + memory math.</li><li>Design the handoff: notebook exploration → production module. What changes (structure/tests/config/logging)? What stays (logic/seeds)? Show both artifacts for one analysis.</li></ol></div>
+<h3>25.8 Mini-challenge 🏆</h3>
+<div class="ex L2"><span class="pill">Challenge</span><p><strong>Build <code>ds_bridge_lab.py</code>.</strong> End-to-end stdlib pipeline on a 500-row synthetic messy CSV (generate it!): profile → clean (pure + reject-reasons) → dedupe → stats (Counter/median/mode) → seeded split → <code>report.txt</code> + <code>clean.jsonl</code> (atomic!) + run-log with seed. Then write the one-page "Part 2 readiness" self-assessment: which chapters you lean on, which need reps. The bridge, crossed deliberately.</p></div>
+<div class="callout good"><strong class="t">🏁 Chapter summary → next</strong><strong>Remember:</strong> Python won structurally (glue + C-libs + notebooks + ecosystem + general-purpose; honest limits known) · workflow map (ask→get→clean→explore→model→communicate→deploy) with Part-1 cores · chapter-to-job links (every chapter pays daily!) · patterns (seed! pure-clean + reject-reasons! set-dedupe! shuffle-split!) · roadmap (Parts 2–6 add layers, assume fluency) · Part-1-first debugging forever. <strong>Next:</strong> the Data Science Toolkit intro + Projects 1–5 — the map becomes logged hours.</div>
+</div></section>

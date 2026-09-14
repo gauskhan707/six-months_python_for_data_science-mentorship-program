@@ -1,0 +1,252 @@
+<!-- CHAPTER 6 -->
+<section class="chapter" id="ch06">
+<div class="ch-head"><div class="ch-num">6</div><div><div class="kicker">Core data</div><h2>Strings</h2></div><div class="ch-tools"><button class="icon-btn bm" title="Bookmark">☆</button><button class="icon-btn done" title="Mark complete">✓</button><span class="chev">▾</span></div></div>
+<div class="ch-body">
+<p><strong>What/why.</strong> A <code>str</code> is an <em>immutable sequence of Unicode characters</em>. Strings exist because most real-world data <em>arrives</em> as text and much of it <em>stays</em> text: names, categories, IDs, addresses, logs, CSV fields, JSON payloads, error messages, file paths. In data science you will clean, split, normalize, validate, and format text every single day — this chapter makes those operations fluent and exact. <strong>Core law (from Chapter 3):</strong> every string "modification" builds a <em>new</em> string; the original never changes. Every method below <em>returns</em> a new string — none mutates.</p>
+
+<h3>6.1 Creation: quotes, escapes, raw strings, multiline</h3>
+<p><strong>What.</strong> String literals come in four quoting styles with identical value semantics — choose by content convenience:</p>
+<div class="code-block"><div class="code-head">quoting styles + escapes <button class="copy-btn">Copy</button></div><pre><code>s1 = 'single'            # identical meaning to double — pick ONE style per project
+s2 = "double"            # (this book uses double; PEP 8 allows either)
+s3 = "it's easy"         # double quotes contain apostrophes cleanly
+s4 = 'say "hi"'          # single quotes contain double quotes cleanly
+s5 = """triple-double
+spans lines, keeps newlines"""   # multi-line text / docstrings
+s6 = '''triple-single, same idea'''
+esc = "col1\tcol2\nline2\"quoted\"\\backslash"  # \t tab, \n newline, \" quote, \\ backslash
+print(esc)
+raw = r"C:\data\new"     # RAW: backslashes are LITERAL (no escapes processed)
+print(raw)               # C:\data\new — compare: "\n" would be a NEWLINE
+print(len(raw))          # 11 — backslashes are ordinary characters here</code></pre><div class="out">col1	col2
+line2"quoted"\backslash
+C:\data\new
+11</div></div>
+<p><strong>Step-by-step (escapes).</strong> Inside a non-raw literal, backslash starts an <em>escape sequence</em>: <code>\n</code> = one newline character (not two characters!), <code>\t</code> = one tab, <code>\"</code> = a literal quote that doesn't end the string, <code>\\</code> = one literal backslash. So <code>"a\nb"</code> has length 3 (<code>a</code>, newline, <code>b</code>). The <code>r"…"</code> prefix disables <em>all</em> escapes — essential for Windows paths (<code>r"C:\new"</code> vs <code>"C:\new"</code> = <code>C:</code> + newline + <code>ew</code>!) and regular expressions (where backslashes are the regex language itself).</p>
+<p><strong>More examples — adjacent-literal concatenation and explicit joins:</strong></p>
+<div class="code-block"><div class="code-head">long strings, three professional ways <button class="copy-btn">Copy</button></div><pre><code># 1. Adjacent literals auto-join (parse time, zero cost):
+query = ("SELECT name, age "
+         "FROM users "
+         "WHERE age &gt; 18")
+# 2. Triple quotes for real multiline (newlines INCLUDED):
+msg = """Dear Ali,
+Your report is ready."""
+# 3. Explicit join for computed parts (NEVER += in a loop — §6.7):
+parts = ["2026", "09", "14"]
+print(query)
+print(msg)
+print("-".join(parts))</code></pre><div class="out">SELECT name, age FROM users WHERE age &gt; 18
+Dear Ali,
+Your report is ready.
+2026-09-14</div></div>
+<div class="callout warn"><strong class="t">⚠️ Common mistakes</strong>Unterminated literal (<code>"abc</code> → SyntaxError/EOL) · <code>"C:\new\test"</code> (silent <code>\n</code>/<code>\t</code> corruption — use raw or forward slashes) · raw string ending in backslash (<code>r"\"</code> → SyntaxError — the quote gets escaped!) · assuming triple quotes strip indentation (they don't — use <code>textwrap.dedent</code> for indented templates).</div>
+
+<h3>6.2 Indexing: positions from both ends</h3>
+<p><strong>What.</strong> Each character has a <em>position</em>: <code>0</code> for the first, counting up — and <code>-1</code> for the last, counting down. <code>s[i]</code> returns the one-character string at position <code>i</code>. Out-of-range → <code>IndexError</code>.</p>
+<p><strong>Why zero-based + negative.</strong> Zero-based: index = <em>offset from the start</em> (<code>s[0]</code> is 0 steps in), making slicing arithmetic (§6.3) beautifully consistent: <code>s[:n] + s[n:] == s</code>. Negative: "from the end" access without knowing the length (<code>s[-1]</code> = last char — no <code>len()</code> dance).</p>
+<div class="diagram"><strong>Figure 6.1 — Index map for "PYTHON" (length 6, valid: -6..5)</strong><div class="mem"><div class="membox"><b>chars</b>P&nbsp;&nbsp;Y&nbsp;&nbsp;T&nbsp;&nbsp;H&nbsp;&nbsp;O&nbsp;&nbsp;N</div><div class="membox"><b>positive</b>0&nbsp;&nbsp;1&nbsp;&nbsp;2&nbsp;&nbsp;3&nbsp;&nbsp;4&nbsp;&nbsp;5</div><div class="membox"><b>negative</b>-6&nbsp;-5&nbsp;-4&nbsp;-3&nbsp;-2&nbsp;-1</div></div><div style="font-size:.85rem">s[0]→'P' · s[5]→'N' · s[-1]→'N' · s[6]→ 💥 IndexError · s[-7]→ 💥 IndexError</div></div>
+<div class="code-block"><div class="code-head">indexing + len + safe last-char <button class="copy-btn">Copy</button></div><pre><code>s = "PYTHON"
+print(s[0], s[5], s[-1], s[-6])  # P N N P — s[-6] is first (len 6)
+print(len(s))                    # 6 — number of CHARACTERS
+# Safe patterns:
+print(s[len(s) - 1])             # last char, manual — or just s[-1]
+print(s[0] if s else "?")        # guard EMPTY string (s[0] on "" → IndexError!)</code></pre><div class="out">P N N P
+6
+N
+P</div></div>
+<div class="callout warn"><strong class="t">⚠️ Common mistakes</strong><code>s[len(s)]</code> → IndexError (last valid is <code>len-1</code> — the eternal off-by-one) · indexing an empty string (guard with <code>if s:</code>) · <code>s[0] = "p"</code> → TypeError (immutable! build new: <code>"p" + s[1:]</code>) · confusing character-count with byte-count (<code>len("café") == 4</code> chars but 5 UTF-8 bytes — §6.8).</div>
+
+<h3>6.3 Slicing: <code>s[start:stop:step]</code> — the most-used operation in text work</h3>
+<p><strong>What.</strong> A <em>slice</em> extracts a subsequence: characters from index <code>start</code> (<em>inclusive</em>) up to <code>stop</code> (<em>exclusive</em>), taking every <code>step</code>-th character. Any part may be omitted: missing <code>start</code> → beginning; missing <code>stop</code> → end; missing <code>step</code> → 1. Negative <code>step</code> walks <em>backwards</em> (and then the defaults flip: start→end, stop→beginning).</p>
+<p><strong>Why stop-exclusive.</strong> Three felicities: (1) slice <em>length</em> = <code>stop - start</code> (<code>s[2:5]</code> has exactly 3 chars); (2) <em>clean splits</em>: <code>s[:n] + s[n:] == s</code> for any <code>n</code>; (3) <em>adjacent ranges never overlap or gap</em> (<code>s[0:3] + s[3:6]</code> partitions perfectly). Exclusive-stop is the convention behind <code>range()</code> too (Chapter 10) — one rule, everywhere.</p>
+<p><strong>Intuition: fence posts, not fence panels.</strong> Picture indices as pointing <em>between</em> characters (the gaps), numbered 0..len: <code>|0|P|1|Y|2|T|3|H|4|O|5|N|6|</code>. <code>s[1:4]</code> takes everything between gap 1 and gap 4 → <code>"YTH"</code>. This gap-model makes every slice predictable — draw it for each example below until it's reflex.</p>
+<div class="code-block"><div class="code-head">slicing, comprehensively <button class="copy-btn">Copy</button></div><pre><code>s = "PYTHON"
+print(s[0:3])    # 'PYT' — gaps 0..3
+print(s[:3])     # 'PYT' — start defaults to 0
+print(s[3:])     # 'HON' — stop defaults to len
+print(s[:])      # 'PYTHON' — full copy (new object, same chars)
+print(s[::2])    # 'PTO' — every 2nd char (0,2,4)
+print(s[1::2])   # 'YHN' — every 2nd starting at 1
+print(s[::-1])   # 'NOHTYP' — THE reverse idiom (step -1 flips defaults)
+print(s[-3:])    # 'HON' — last 3 (negative start counts from end)
+print(s[:-3])    # 'PYT' — everything EXCEPT last 3
+print(s[100:])   # '' — out-of-range slices CLIP silently (never raise!)
+print(s[4:1])    # '' — start past stop (step +1) → empty, not error</code></pre><div class="out">PYT
+PYT
+HON
+PYTHON
+PTO
+YHN
+NOHTYP
+HON
+PYT
+
+</div></div>
+<p><strong>Step-by-step (<code>s[::-1]</code>).</strong> <code>step = -1</code> means walk backwards. With negative step, omitted <code>start</code> = "the end" and omitted <code>stop</code> = "before the beginning": visit indices 5,4,3,2,1,0 → <code>N,O,H,T,Y,P</code>. Memorize this idiom — it reverses any sequence (strings, lists, tuples) and appears constantly in interviews.</p>
+<p><strong>Multiple examples — slicing in real jobs:</strong></p>
+<div class="code-block"><div class="code-head">slices at work: extensions, masking, fixed-width fields <button class="copy-btn">Copy</button></div><pre><code>fname = "report.2026.csv"
+print(fname[-3:])              # 'csv' — extension (or pathlib, Ch. 15)
+print(fname[:-4])              # 'report.2026' — stem
+card = "4111111111111111"
+print("*" * 12 + card[-4:])    # ************1111 — masking
+line = "Ali   30Lahore"        # fixed-width record: name[0:6] age[6:8] city[8:]
+print(line[0:6].strip(), line[6:8], line[8:])  # Ali 30 Lahore
+print("abcdef"[::2], "abcdef"[1::2])  # ace bdf — stride tricks</code></pre><div class="out">csv
+report.2026
+************1111
+Ali 30 Lahore
+ace bdf</div></div>
+<div class="callout info"><strong class="t">💡 Slices never raise — indexes do</strong><code>s[100]</code> → IndexError, but <code>s[100:]</code> → <code>""</code>. This asymmetry is deliberate: slices <em>clip</em> to valid bounds, making "first N chars" / "last N chars" safe without length checks. Exploit it: <code>preview = text[:200]</code> is safe for any length.</div>
+
+<h3>6.4 Operators on strings: +, *, in (and what you can't do)</h3>
+<div class="code-block"><div class="code-head">string operators <button class="copy-btn">Copy</button></div><pre><code>print("data" + " " + "science")  # concatenation → 'data science'
+print("ab" * 3)                  # repetition → 'ababab' (int only!)
+print("=" * 40)                  # separators/dividers — the honest use of *
+print("cat" in "concatenate")    # True — substring test
+print("py" not in "java")        # True
+# print("a" + 1)    → TypeError: convert first: "a" + str(1)
+# print("a" - "b")  → TypeError: no subtraction (use .replace/.strip)
+# print("a" * 2.5)  → TypeError: can't multiply by non-int</code></pre><div class="out">data science
+ababab
+========================================
+True
+True</div></div>
+<p><strong>Best practice.</strong> Use <code>+</code> for a <em>few</em> known pieces, <code>join</code> (§6.5) for <em>many/unknown</em> pieces, f-strings (§6.6) for <em>embedding values</em>. Never <code>+=</code> in a loop (§6.7's O(n²) proof).</p>
+
+<h3>6.5 The method toolkit: cleaning, splitting, searching, validating</h3>
+<p><strong>What.</strong> String <em>methods</em> (functions bound to string objects — Chapter 18 explains the mechanism) perform every text operation. All return <em>new</em> strings (immutability!) — the original is never touched. The table below is the working vocabulary; starred (*) rows are daily-use in data cleaning.</p>
+<table><tr><th>Job</th><th>Methods</th><th>Example → result</th></tr>
+<tr><td>Case ★</td><td><code>lower upper title capitalize casefold swapcase</code></td><td><code>"Hi There".lower() → 'hi there'</code></td></tr>
+<tr><td>Trim ★</td><td><code>strip lstrip rstrip</code> (chars optional)</td><td><code>"  x  ".strip() → 'x'</code>; <code>"##x##".strip("#") → 'x'</code></td></tr>
+<tr><td>Pad/align</td><td><code>zfill center ljust rjust</code></td><td><code>"42".zfill(5) → '00042'</code></td></tr>
+<tr><td>Split ★</td><td><code>split rsplit splitlines partition rpartition</code></td><td><code>"a,b".split(",") → ['a','b']</code></td></tr>
+<tr><td>Join ★</td><td><code>sep.join(iterable)</code></td><td><code>"-".join(["a","b"]) → 'a-b'</code></td></tr>
+<tr><td>Find ★</td><td><code>find rfind index count startswith endswith</code></td><td><code>"cat".find("a") → 1</code></td></tr>
+<tr><td>Replace ★</td><td><code>replace(old, new, count=-1)</code></td><td><code>"aaa".replace("a","b",2) → 'bba'</code></td></tr>
+<tr><td>Validate</td><td><code>isdigit isalpha isalnum isspace isupper istitle</code></td><td><code>"42".isdigit() → True</code></td></tr>
+<tr><td>Translate</td><td><code>maketrans translate</code></td><td>Bulk char-mapping (fast multi-replace)</td></tr></table>
+<div class="code-block"><div class="code-head">the cleaning pipeline (memorize this shape) <button class="copy-btn">Copy</button></div><pre><code>raw = "  Ali.Raza@mail.COM  "
+clean = raw.strip().lower().replace(" ", "")  # CHAIN: each returns new str
+print(f"[{raw}] → [{clean}]")   # original UNTOUCHED; new string built
+user, sep, domain = clean.partition("@")  # ALWAYS 3 parts (no IndexError!)
+print(user, "|", domain)        # ali.raza | mail.com
+# partition vs split: partition never fails on missing separator:
+print("no-at-sign".partition("@"))  # ('no-at-sign', '', '') — safe unpack!
+print("a,b,c".split(","))           # ['a', 'b', 'c']
+print("a,b,c".rsplit(",", 1))       # ['a,b', 'c'] — maxsplit from the RIGHT
+print("x1y2z".translate(str.maketrans("xyz", "ABC")))  # A1B2C</code></pre><div class="out">[  Ali.Raza@mail.COM  ] → [ali.raza@mail.com]
+ali.raza | mail.com
+('no-at-sign', '', '')
+['a', 'b', 'c']
+['a,b', 'c']
+A1B2C</div></div>
+<p><strong>Step-by-step (the chain).</strong> <code>raw.strip()</code> returns <code>"Ali.Raza@mail.COM"</code> (new object); <code>.lower()</code> on <em>that</em> returns <code>"ali.raza@mail.com"</code>; <code>.replace(" ", "")</code> returns the final. <code>raw</code> still holds the original with spaces and caps — <strong>forgetting to assign the result</strong> (<code>s.strip()</code> alone on a line) is the most common string-method bug: the cleaned string is computed and instantly discarded.</p>
+<p><strong><code>find` vs <code>index</code> — the deliberate pair.</strong> <code>s.find(x)</code> returns <code>-1</code> when absent (safe probing); <code>s.index(x)</code> raises <code>ValueError</code> (absence is an error). Rule: <code>find</code> (or <code>in</code>) for optional searches; <code>index</code> when missing data means corrupt input that <em>should</em> crash loudly. Same philosophy as <code>dict.get</code> vs <code>d[k]</code> (Chapter 8) — one language-wide pattern.</p>
+<div class="code-block"><div class="code-head">split subtleties that bite in data work <button class="copy-btn">Copy</button></div><pre><code>print("a  b   c".split())       # ['a','b','c'] — NO-arg split: ANY whitespace runs, strips ends
+print("a  b   c".split(" "))    # ['a','','b','','','c'] — EXPLICIT " ": every gap counts!
+print("a,b,".split(","))        # ['a','b',''] — trailing empty KEPT (csv-like)
+print("  padded  ".split())     # ['padded']
+print("one\ntwo\n".splitlines())  # ['one','two'] — universal newlines, no empties at end</code></pre><div class="out">['a', 'b', 'c']
+['a', '', 'b', '', '', 'c']
+['a', 'b', '']
+['padded']
+['one', 'two']</div></div>
+<div class="callout warn"><strong class="t">⚠️ split() vs split(" ") — know the difference cold</strong>No-arg <code>split()</code> splits on <em>runs</em> of any whitespace and trims the ends (perfect for messy human text). Explicit <code>split(" ")</code> splits on <em>each single space</em> (perfect for strict formats, terrible for padded logs). Choosing wrong silently mangles columns — a genuine data-corruption vector.</div>
+
+<h3>6.6 Formatting: f-strings (the modern standard) + format specs</h3>
+<p><strong>What.</strong> F-strings (<code>f"…{expr}…"</code>, Python 3.6+) embed live expressions inside string literals — evaluated at runtime and formatted per an optional <em>format spec</em> after <code>:</code>. They replaced <code>%</code>-formatting and (mostly) <code>str.format()</code> as the default: faster, shorter, and readable.</p>
+<div class="code-block"><div class="code-head">f-strings: the complete working set <button class="copy-btn">Copy</button></div><pre><code>name, score, rate = "Ali", 93.456, 0.875
+print(f"{name} scored {score:.1f}")   # 1 decimal → Ali scored 93.5
+print(f"{rate:.1%}")                  # percent → 87.5%
+print(f"{score:08.2f}")               # zero-padded width 8 → 00093.46
+print(f"{1000:,}")                    # thousands separator → 1,000
+print(f"{name!r}")                    # !r → repr (quotes shown — DEBUG view)
+print(f"{name!s}")                    # !s → str (default, rarely written)
+print(f"{score=}")                    # self-documenting → score=93.456
+print(f"{2 + 2 = }")                  # expressions too → 2 + 2 = 4
+print(f"{'hi':&gt;10}|{'hi':&lt;10}|{'hi':^10}|")  # align: right/left/center
+# Nested/dynamic specs (3.12+ allows quote reuse inside braces):
+w = 10
+print(f"{name:{w}}!")</code></pre><div class="out">Ali scored 93.5
+87.5%
+00093.46
+1,000
+'Ali'
+Ali
+score=93.456
+2 + 2 = 4
+        hi|hi        |    hi    |
+Ali       !</div></div>
+<p><strong>Format-spec anatomy: <code>{value:fill align width , .precision type}</code>.</strong> Types that matter: <code>f</code> fixed-point, <code>%</code> percent (×100 + sign), <code>,</code> thousands grouping, <code>d/b/x/o</code> integer bases, <code>e</code> scientific, <code>s</code> string. <code>=</code> adds the expression text (debugging gold: <code>f"{rows=}, {bad=}"</code>). Conversion <code>!r</code> shows the <em>representation</em> (quotes, escapes visible) — always use it when debugging string content ("is that trailing space real?").</p>
+<p><strong>When NOT f-strings:</strong> (1) <em>templates stored in variables/files/config</em> (f-strings evaluate immediately where written — use <code>template.format(name=…)</code> for deferred filling); (2) <em>logging</em> (pass args separately — <code>log.info("rows=%d", n)</code> — so formatting is skipped when the level is off, Chapter 23); (3) <em>user-supplied format strings</em> (never f-string/`format` untrusted templates — attribute access can leak internals; use <code>string.Template</code> for user templates).</p>
+
+<h3>6.7 Performance: join vs += (the O(n²) trap, proven)</h3>
+<p><strong>What.</strong> Strings are immutable (§3.3) — so <code>result += piece</code> in a loop <em>copies the entire growing string every iteration</em>: 1 + 2 + 3 + … + n characters copied = O(n²). <code>"".join(pieces)</code> measures once, allocates once, copies once = O(n). CPython has an micro-optimization for some <code>+=</code> cases (over-allocating when refcount is 1) — but it's fragile (breaks with aliasing, function boundaries, PyPy) and <em>must never be relied upon</em>.</p>
+<div class="code-block"><div class="code-head">join vs +=: measured <button class="copy-btn">Copy</button></div><pre><code>import time
+pieces = ["abcdefgh"] * 20000
+t0 = time.perf_counter()
+s = ""
+for p in pieces:
+    s += p                      # O(n²): copies ~1.6 BILLION chars total
+t_plus = time.perf_counter() - t0
+t0 = time.perf_counter()
+s2 = "".join(pieces)            # O(n): one allocation
+t_join = time.perf_counter() - t0
+print(len(s) == len(s2))        # True — same result...
+print(f"+=: {t_plus*1000:.1f}ms   join: {t_join*1000:.1f}ms")  # ...vastly different cost</code></pre><div class="out">True
++=: 28.4ms   join: 0.3ms</div></div>
+<p><strong>Rule.</strong> Collect pieces in a list, join once. (Comprehensions make this one line: <code>"".join(f(x) for x in items)</code> — a generator, so no intermediate list either. Chapter 13/19.) The same "batch, don't dribble" principle governs file writes and DB inserts.</p>
+
+<h3>6.8 Unicode &amp; encoding: characters vs bytes (the distinction that matters)</h3>
+<p><strong>What.</strong> <code>str</code> = a sequence of abstract <em>characters</em> (Unicode code points: <code>U+0041 'A'</code>, <code>U+1F600 '😀'</code>). <code>bytes</code> = a sequence of concrete <em>byte values</em> 0–255 for storage/transmission. <strong>Encoding</strong> (<code>str → bytes</code>) happens on every write/send; <strong>decoding</strong> (<code>bytes → str</code>) on every read/receive. <strong>UTF-8</strong> (the universal default) encodes ASCII in 1 byte, most scripts in 2–3, emoji in 4.</p>
+<p><strong>Why two types.</strong> Because conflating them caused decades of corruption ("mojibake": <code>cafÃ©</code>). Python 3's strict boundary — <code>str</code> inside programs, <code>bytes</code> at the edges, explicit conversion between — means text bugs surface as loud <code>UnicodeDecodeError</code>/<code>TypeError</code> instead of silent garbage. You cannot <code>"a" + b"b"</code> (TypeError) — decode first.</p>
+<div class="code-block"><div class="code-head">encode / decode, lengths, file rule <button class="copy-btn">Copy</button></div><pre><code>s = "café 😀"
+b = s.encode("utf-8")     # str → bytes (what hits disk/network)
+print(b)                  # b'caf\xc3\xa9 \xf0\x9f\x98\x80'
+print(len(s), len(b))     # 6 chars vs 10 BYTES — len counts units of ITS type!
+print(b.decode("utf-8"))  # bytes → str (what your program thinks in)
+print(ord("A"), chr(65), hex(ord("😀")))  # 65 A 0x1f600 — code points
+# Files: ALWAYS declare encoding explicitly (Chapter 15):
+# with open("f.txt", encoding="utf-8") as f: ...</code></pre><div class="out">b'caf\xc3\xa9 \xf0\x9f\x98\x80'
+6 10
+café 😀
+65 A 0x1f600</div></div>
+<div class="callout bad"><strong class="t">🛠️ Debugging UnicodeDecodeError/UnicodeEncodeError</strong><code>UnicodeDecodeError</code> (reading): the file isn't in the encoding you assumed. Fix: (1) declare <code>encoding="utf-8"</code> explicitly; (2) if it fails, the file is likely <code>latin-1</code>/<code>cp1252</code> (Windows legacy) — try those; (3) last resort <code>errors="replace"</code> (� markers, logged!) — never <code>"ignore"</code> silently (destroys data). <code>UnicodeEncodeError</code> (writing/printing): the <em>target</em> can't represent a character (Windows console without UTF-8 mode) — write to a UTF-8 file instead of the console, or set <code>PYTHONUTF8=1</code>.</div>
+<p><strong>📊 Data-Science connection.</strong> Real datasets mix encodings (UTF-8 exports, cp1252 Excel saves, latin-1 legacy dumps). Pandas' <code>read_csv(encoding=…)</code> exposes exactly this parameter — and now you know what it does. Bonus: <code>casefold()</code> (not <code>lower()</code>) is the correct Unicode caseless match (<code>"ß".casefold() == "ss"</code>); <code>unicodedata.normalize("NFKC", s)</code> unifies look-alike characters before deduplication.</p>
+
+<h3>6.9 Text-processing mini-patterns (applied synthesis)</h3>
+<div class="code-block"><div class="code-head">normalize phones + parse pairs + mask emails <button class="copy-btn">Copy</button></div><pre><code>import re
+# 1. Normalize phone variants → digits only
+def digits_only(s):
+    return "".join(ch for ch in s if ch.isdigit())
+print([digits_only(p) for p in ["(0300) 123-4567", "+92 300 1234567"]])
+# 2. Parse "k:v;k:v" pairs → dict
+record = "name:Ali;age:30;city:Lahore"
+pairs = dict(part.split(":", 1) for part in record.split(";") if ":" in part)
+print(pairs)
+# 3. Mask email: keep first+last char of local part
+def mask_email(e):
+    user, sep, domain = e.partition("@")
+    if not sep or len(user) &lt; 2:
+        return "***@" + domain if sep else "***"
+    return f"{user[0]}***{user[-1]}@{domain}"
+print(mask_email("ali.raza@mail.com"))  # a***a@mail.com
+# 4. Word count that survives punctuation (preview: regex \w+)
+print(len(re.findall(r"\w+", "Hello,  world!  123")))  # 3</code></pre><div class="out">['03001234567', '923001234567']
+{'name': 'Ali', 'age': '30', 'city': 'Lahore'}
+a***a@mail.com
+3</div></div>
+
+<h3>6.10 Interview questions</h3>
+<details><summary>Q1: Why are strings immutable? What would break if they weren't?</summary><div class="inner">Immutability enables safe sharing (no defensive copies), hashing (dict keys/set members need stable values — mutating a key would corrupt its bucket), interning, and thread safety. If strings were mutable, every dict keyed by text would be corruptible by aliasing — catastrophic for a language where dicts are everywhere.</div></details>
+<details><summary>Q2: join vs += in a loop — complexity and rule?</summary><div class="inner"><code>+=</code> per iteration copies the whole accumulated string → O(n²) total. <code>join</code> allocates once → O(n). Rule: collect pieces, join once. At 20k pieces the measured gap is ~100× (§6.7).</div></details>
+<details><summary>Q3: find vs index? split() vs split(" ")?</summary><div class="inner"><code>find</code> returns −1 when missing (safe probe); <code>index</code> raises ValueError (missing = corrupt). No-arg <code>split()</code> splits on whitespace runs + trims (messy human text); <code>split(" ")</code> splits on each single space, keeping empties (strict formats). Wrong choice silently shifts columns.</div></details>
+<details><summary>Q4: str vs bytes? What is encoding, and how do you debug UnicodeDecodeError?</summary><div class="inner"><code>str</code> = Unicode characters (in-program thinking); <code>bytes</code> = byte values (storage/transmission). Encoding converts str→bytes (UTF-8 default); decoding reverses. UnicodeDecodeError = file isn't in the assumed encoding → declare <code>encoding="utf-8"</code>, else try cp1252/latin-1, last resort <code>errors="replace"</code> with logging — never silent ignore.</div></details>
+
+<h3>6.11 Exercises</h3>
+<div class="ex L1"><span class="pill">Level 1 · Understand</span><ol><li>For <code>s = "DataScience"</code> write slices: first 4, last 7, every 2nd char, reversed, <code>"Science"</code> two different ways, everything except first+last. Verify each.</li><li>Draw the gap-model (§6.3) for <code>"ABCDE"[1:4]</code> and <code>"ABCDE"[::-1]</code>, marking every visited index.</li><li>Explain why <code>"  x  ".strip()</code> alone on a line "does nothing", and fix three such discarded-result bugs in a sample snippet.</li></ol></div>
+<div class="ex L2"><span class="pill">Level 2 · Apply</span><ol><li>Normalize phones (§6.9) into <code>+92…</code> form: strip non-digits, convert leading <code>0</code> → <code>92</code>, validate length 12. Handle 5 messy variants.</li><li>Parse <code>"name:Ali;age:30;city:Lahore"</code> into a dict (see §6.9), then generalize to any <code>k:v</code> separator pair. Handle missing <code>:</code> gracefully.</li><li>Format a table with f-strings: names left-aligned width 12, scores right-aligned width 6 with 1 decimal, pass-rate as percent. No <code>\t</code> hacks.</li></ol></div>
+<div class="ex L3"><span class="pill">Level 3 · Interview</span><ol><li><code>is_palindrome(s)</code> ignoring case/spaces/punctuation — write the one-liner AND the readable version; argue which ships to production and why.</li><li>Benchmark <code>+=</code> vs <code>join</code> vs <code>io.StringIO</code> writes at 5 sizes; identify the O(n²) curve by shape. When (if ever) is StringIO the right choice?</li></ol></div>
+<h3>6.12 Mini-challenge 🏆</h3>
+<div class="ex L2"><span class="pill">Challenge</span><p><strong>Build <code>text_cleaner.py</code>.</strong> Read a messy multi-line text block (mixed case, extra spaces, inconsistent phone/email formats, blank lines): emit a cleaned report with (1) stripped non-empty lines, (2) extracted + normalized phones, (3) masked emails, (4) word count, (5) top-5 words (casefolded, punctuation-stripped). Every operation must use this chapter's tools only (no Pandas) — it's a Chapter 25 prototype.</p></div>
+<div class="callout good"><strong class="t">🏁 Chapter summary → next</strong><strong>Remember:</strong> immutable Unicode — methods <em>return</em> new strings (assign the result!) · zero-based + negative indexing; slices <code>[start:stop:step]</code> are stop-exclusive and never raise (<code>[::-1]</code> reverses) · <code>strip/split/join/replace/find/partition</code> clean text · f-strings format (<code>:,.1f % !r =</code>) · <code>join</code> not <code>+=</code> (O(n) vs O(n²)) · <code>str</code> inside, <code>bytes</code> at edges, UTF-8 declared always. <strong>Next:</strong> Chapter 7 — lists: the ordered mutable workhorse — methods, sorting, nesting, traversal, and shallow vs deep copy.</div>
+</div></section>

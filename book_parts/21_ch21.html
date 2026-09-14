@@ -1,0 +1,264 @@
+<!-- CHAPTER 21 -->
+<section class="chapter" id="ch21">
+<div class="ch-head"><div class="ch-num">21</div><div><div class="kicker">Power patterns</div><h2>Decorators and Context Managers</h2></div><div class="ch-tools"><button class="icon-btn bm" title="Bookmark">☆</button><button class="icon-btn done" title="Mark complete">✓</button><span class="chev">▾</span></div></div>
+<div class="ch-body">
+<p><strong>What/why.</strong> Two patterns separate scripts from systems. <strong>Decorators</strong> (<code>@name</code>) <em>wrap</em> functions/classes to add behavior — timing, caching, validation, retries, auth — <em>without editing them</em> (open/closed principle: open for extension, closed for modification). <strong>Context managers</strong> (<code>with</code>) <em>guarantee setup/teardown pairing</em> — files close, locks release, transactions commit-or-rollback, directories restore — <em>even across exceptions, returns, and breaks</em>. Both rest on one foundation: <strong>functions are objects</strong> (§3.1/11.8) + <strong>closures capture state</strong> (§11.7). This chapter takes both from mechanism to mastery: factories, stacking order, class-vs-generator CMs, suppression semantics, and the stdlib's greatest hits.</p>
+
+<h3>21.1 Decorators from zero: rebinding + closure + wraps (the whole trick)</h3>
+<p><strong>What — the complete mechanism in one sentence:</strong> <code>@d def f(…): …</code> is <em>exactly</em> <code>def f(…): …</code> followed by <code>f = d(f)</code> — the decorator receives the function object at <em>definition time</em> and whatever it returns <em>becomes</em> the name. The usual return is a <em>closure wrapper</em> adding before/after behavior around a call-through.</p>
+<div class="code-block"><div class="code-head">timer: the canonical decorator, fully annotated <button class="copy-btn">Copy</button></div><pre><code>import functools, time
+
+def timer(fn):
+    @functools.wraps(fn)              # ① preserve __name__/__doc__/__module__ (+__wrapped__) — ALWAYS
+    def wrapper(*args, **kwargs):     # ② accept ANY signature (transparent!)
+        start = time.perf_counter()
+        result = fn(*args, **kwargs)  # ③ call THROUGH (the only fn-specific line!)
+        print(f"{fn.__name__} took {time.perf_counter()-start:.4f}s")
+        return result                 # ④ MUST return it (else decorated fns → None!)
+    return wrapper                    # ⑤ decorator RETURNS the wrapper (becomes the name)
+
+@timer                                # slow = timer(slow) — executed ONCE, at def time
+def slow(n):
+    """Sum squares."""
+    return sum(i*i for i in range(n))
+
+print(slow(200000))                   # wrapper runs: time → call → print → return
+print("name:", slow.__name__, "| doc:", slow.__doc__)  # preserved by wraps ✓
+print("inner:", slow.__wrapped__.__name__)  # wraps links back (debuggers/tests use this!)</code></pre><div class="out">slow took 0.0102s (varies by machine — prints first, inside the call)
+666666666700000
+name: slow | doc: Sum squares.
+inner: slow</div></div>
+<p><strong>Step-by-step (two phases).</strong> <em>Definition time:</em> <code>slow</code> (original) → <code>timer(slow)</code> builds <code>wrapper</code> (closure over <code>fn</code>) → name <code>slow</code> retied to <code>wrapper</code>. Original survives only as the closure cell + <code>__wrapped__</code>. <em>Call time:</em> your args hit <code>wrapper</code> → clock starts → <code>fn(*a, **k)</code> runs the original → elapsed prints → result returns. Without <code>wraps</code>: <code>__name__ == "wrapper"</code>, docstring lost, signature hidden, stacked decorators + <code>help()</code> + test names degrade — <em>always</em> wrap.</p>
+<div class="callout warn"><strong class="t">⚠️ Decorator traps (all classic)</strong>Forgetting <code>return fn(*a, **k)</code> (None-machine!) · fixed wrapper signature (<code>def wrapper(x)</code> breaks other arities — use <code>*a/**k</code>) · forgetting <code>wraps</code> (identity theft) · decorating <em>methods</em> without accounting for <code>self</code> (fine with <code>*a/**k</code> — <code>self</code> just flows through!) · state in the decorator body shared across functions (put per-function state in the <em>closure</em>, §11.8's <code>done</code>).</div>
+
+<h3>21.2 Decorator factories: @retry(times=3) (one more nesting level)</h3>
+<p><strong>What.</strong> <code>@retry(times=3)</code> <em>calls</em> <code>retry(times=3)</code> first — which must therefore <em>return a decorator</em>. Three levels: factory(args) → decorator(fn) → wrapper(*a, **k). Read inside-out: the factory configures, the decorator binds, the wrapper runs.</p>
+<div class="code-block"><div class="code-head">retry factory + validate + count (practical trio) <button class="copy-btn">Copy</button></div><pre><code>import functools, time
+
+def retry(times=3, delay=0.0, allowed=(Exception,)):
+    """Factory: build a decorator retrying on `allowed`, `times` tries, `delay` apart."""
+    def decorator(fn):
+        @functools.wraps(fn)
+        def wrapper(*args, **kwargs):
+            last = None
+            for attempt in range(1, times + 1):
+                try:
+                    return fn(*args, **kwargs)   # success → return immediately
+                except allowed as e:            # failure → record, sleep, retry...
+                    last = e
+                    print(f"  try {attempt}/{times} failed: {e}")
+                    if delay:
+                        time.sleep(delay)
+            raise last                          # ...exhausted → re-raise LAST (traceback kept!)
+        return wrapper
+    return decorator
+
+def positive(fn):                               # validator decorator (no factory — direct)
+    @functools.wraps(fn)
+    def wrapper(x, *args, **kwargs):
+        if x &lt;= 0:
+            raise ValueError(f"{fn.__name__} needs x &gt; 0, got {x}")
+        return fn(x, *args, **kwargs)
+    return wrapper
+
+calls = {"n": 0}
+@retry(times=3, allowed=(ValueError,))
+def flaky():
+    calls["n"] += 1
+    if calls["n"] &lt; 3:
+        raise ValueError(f"boom {calls['n']}")
+    return "recovered!"
+
+print(flaky())                                   # recovered! (after 2 logged failures)
+
+@positive
+def root(x):
+    return x ** 0.5
+print(root(16))                                 # 4.0
+# root(-1) → ValueError: root needs x &gt; 0, got -1</code></pre><div class="out">  try 1/3 failed: boom 1
+  try 2/3 failed: boom 2
+recovered!
+4.0</div></div>
+<p><strong>Step-by-step (<code>@retry(times=3, …)</code>).</strong> ① <code>retry(times=3, allowed=…)</code> executes → returns <code>decorator</code> (closure over config). ② <code>decorator(flaky)</code> executes → returns <code>wrapper</code> (closure over <code>fn</code> + config). ③ Name <code>flaky</code> retied. Calls hit <code>wrapper</code>: loop tries → success returns / failure logs + retries / exhaustion re-raises <code>last</code> (original traceback preserved — never <code>raise DifferentError</code> bare here; chain with <code>from</code> if translating — §14.3).</p>
+
+<h3>21.3 Stacking: order is behavior (@a @b def f = a(b(f)))</h3>
+<div class="code-block"><div class="code-head">stacking order, proven with probes <button class="copy-btn">Copy</button></div><pre><code>import functools
+
+def tag(name):
+    def deco(fn):
+        @functools.wraps(fn)
+        def wrapper(*a, **k):
+            print(f"  [{name}: before]")
+            out = fn(*a, **k)
+            print(f"  [{name}: after]")
+            return out
+        return wrapper
+    return deco
+
+@tag("A")          # applied LAST (outermost): A(B(f)) — A.before runs FIRST
+@tag("B")          # applied FIRST (innermost): wraps f directly
+def work():
+    print("  [work]")
+    return 42
+
+print(work())
+# Read: def work → B(work) → A(B(work)). Calls: A.before → B.before → work → B.after → A.after.
+# Real-world stacking logic: @timer OUTER (measure everything incl. retries),
+# @retry MIDDLE, @lru_cache INNER (hits skip retry+timer — usually right!).</code></pre><div class="out">  [A: before]
+  [B: before]
+  [work]
+  [B: after]
+  [A: after]
+42</div></div>
+<p><strong>Why order matters (beyond cosmetics).</strong> Each layer transforms what inner layers see: cache-inside-retry means <em>failures aren't cached, successes skip retries</em> (desired); retry-inside-cache means <em>cache hits return instantly, misses retry</em> (also sensible — different!). Auth-outside-timer times only authorized work. Argue each stack from the call-path: outermost runs first/last (setup/teardown span), innermost touches the original directly.</p>
+
+<h3>21.4 Class decorators + method decorators + parameters preserved</h3>
+<p><strong>What.</strong> Decorators accept <em>any callable target</em>: decorating a <em>class</em> passes the class object (<code>@dataclass</code> itself! — it rewrites <code>__init__/__repr__/__eq__</code>); decorating <em>methods</em> works identically (the wrapper's <code>*args</code> receives <code>self</code> first — flows through untouched). Signature preservation beyond <code>wraps</code> (for <code>inspect.signature</code> fidelity) needs <code>functools.wraps</code> + <code>__wrapped__</code> following (automatic) — full <code>ParamSpec</code> typing (3.10+) for library authors.</p>
+<div class="code-block"><div class="code-head">register pattern (class+function decorator) + method wrap <button class="copy-btn">Copy</button></div><pre><code>import functools
+REGISTRY = {}
+def register(name):
+    """Class/function decorator: record target in REGISTRY, return UNCHANGED."""
+    def deco(target):
+        REGISTRY[name] = target
+        return target          # NOT a wrapper — pure side-effect registration!
+    return deco
+
+@register("csv")
+class CsvReader:
+    pass
+@register("double")
+def double(x):
+    return x * 2
+print(sorted(REGISTRY))  # ['csv', 'double'] — plugin discovery, zero config files!
+
+print(double(21))              # 42 — registered targets work NORMALLY (deco returned them unchanged!)
+# (Timer-on-method demo: @timer works on methods too — self flows through *args. See §21.1!)</code></pre><div class="out">['csv', 'double']
+42</div></div>
+
+<h3>21.5 Context managers: the with-contract (setup → body → guaranteed teardown)</h3>
+<p><strong>What.</strong> <code>with EXPR as VAR:</code> ① evaluates EXPR, ② calls <code>__enter__()</code> (result → VAR), ③ runs the body, ④ calls <code>__exit__(exc_type, exc, tb)</code> <strong>no matter how the body ends</strong> (normal, exception, return, break, continue!). If the body raised, the exception details arrive as <code>__exit__</code>'s args; returning <em>truthy</em> from <code>__exit__</code> <strong>suppresses</strong> it (rare, deliberate — §21.6); falsy/None re-raises after teardown.</p>
+<div class="code-block"><div class="code-head">class CM: full protocol + exception visibility <button class="copy-btn">Copy</button></div><pre><code>import time
+
+class Timer:
+    def __enter__(self):
+        self.start = time.perf_counter()
+        return self                        # `as t` gets THIS
+    def __exit__(self, exc_type, exc, tb):
+        self.elapsed = time.perf_counter() - self.start
+        print(f"  block took {self.elapsed:.4f}s; exc={exc_type.__name__ if exc_type else None}")
+        return False                       # do NOT suppress (None/False → exception propagates!)
+
+with Timer() as t:
+    total = sum(range(100000))
+print("total:", total, "| measured:", round(t.elapsed, 4) &gt;= 0)
+
+try:
+    with Timer():
+        raise ValueError("boom")           # teardown STILL runs, THEN boom propagates
+except ValueError as e:
+    print("propagated:", e)</code></pre><div class="out">  block took 0.0016s; exc=None
+total: 4999950000 | measured: True
+  block took 0.0000s; exc=ValueError
+propagated: boom</div></div>
+<p><strong>Step-by-step (exception path).</strong> Body raises ValueError → Python captures (type, value, traceback) → calls <code>__exit__(ValueError, err, tb)</code> → teardown prints (elapsed measured!) → returns False → original exception re-raised to the outer <code>try</code>. The teardown <em>observes</em> the failure (can log/commit-or-rollback on it!) without <em>consuming</em> it. That's the whole power: <em>cleanup code that sees how the body ended</em>.</p>
+
+<h3>21.6 @contextmanager: the generator shortcut (+ suppression done right)</h3>
+<div class="code-block"><div class="code-head">generator CMs: temp-flag + cd + suppress-pattern <button class="copy-btn">Copy</button></div><pre><code>import contextlib, os
+from pathlib import Path
+
+@contextlib.contextmanager
+def temp_flag(store, key, value):
+    """Set store[key]=value for the block; ALWAYS restore after (even on error)."""
+    sentinel = object()                    # unique "was absent" marker (safer than None!)
+    old = store.get(key, sentinel)
+    store[key] = value
+    try:
+        yield store                        # ← body runs HERE (value → `as s`)
+    finally:
+        if old is sentinel:                # teardown IN finally (the whole point!)
+            store.pop(key, None)
+        else:
+            store[key] = old
+
+cfg = {"debug": False}
+with temp_flag(cfg, "debug", True) as s:
+    print("inside:", s)
+print("outside:", cfg)                     # restored ✓
+
+@contextlib.contextmanager
+def cd(path):                              # chdir with guaranteed restore
+    prev = os.getcwd()
+    os.chdir(path)
+    try:
+        yield Path(path)
+    finally:
+        os.chdir(prev)
+
+import tempfile
+with tempfile.TemporaryDirectory() as td:  # REAL cd demo in a safe sandbox dir!
+    here = Path.cwd()
+    with cd(td):
+        print("inside tmp:", Path.cwd().resolve() == Path(td).resolve())  # True
+    print("restored:", Path.cwd() == here)  # True — guaranteed, even on error!
+# Suppression (RARE + explicit): contextlib.suppress(n) swallows ONLY listed errors:
+with contextlib.suppress(FileNotFoundError):
+    os.unlink("definitely_missing.tmp")    # no crash, no try/except noise
+print("suppressed ✓ (prefer this over try/except/pass — intent is VISIBLE)")</code></pre><div class="out">inside: {'debug': True}
+outside: {'debug': False}
+inside tmp: True
+restored: True
+suppressed ✓ (prefer this over try/except/pass — intent is VISIBLE)</div></div>
+<p><strong>Generator-CM mechanics (exact).</strong> Code before <code>yield</code> = <code>__enter__</code>; the yielded value = <code>as</code>-target; an exception in the body is <em>thrown into the generator at the <code>yield</code></em> (so <code>try/finally</code> around it runs teardown, then the exception continues — matching class-CM falsy-return); <code>return</code> <em>value</em> in the generator is ignored (bare <code>return</code> ends early). Rule: <strong>exactly one <code>yield</code>, wrapped in <code>try/finally</code></strong> (teardown in <code>finally</code> — a bare post-yield line <em>skips on exception</em>!). Choose class-CMs when: reusable/configurable (init args), suppression logic, or <code>__enter__</code> may fail independently. stdlib hits: <code>contextlib.suppress</code> (visible swallowing), <code>redirect_stdout</code> (capture prints in tests!), <code>ExitStack</code> (dynamic N managers — §21.7).</p>
+
+<h3>21.7 Multiple + dynamic managers (ExitStack) + real-world map</h3>
+<div class="code-block"><div class="code-head">stacked with + ExitStack for dynamic counts <button class="copy-btn">Copy</button></div><pre><code>import contextlib
+from pathlib import Path
+
+@contextlib.contextmanager
+def temp_flag(store, key, value):   # §21.6's CM, restated (each listing runs standalone!)
+    had, old = key in store, store.get(key)
+    store[key] = value
+    try:
+        yield store
+    finally:
+        if had:
+            store[key] = old        # restore prior value
+        else:
+            store.pop(key, None)    # remove what we added
+
+# Fixed N: comma-stack (or nested with) — exits run REVERSE order (LIFO: c, b, a):
+with temp_flag({}, "a", 1) as a, temp_flag({}, "b", 2) as b:
+    print("stacked:", a, b)
+# Dynamic N (open len(paths) files — can't write N `with` lines!):
+paths = ["f1.tmp", "f2.tmp"]
+for p in paths:
+    Path(p).write_text(p + "\n", encoding="utf-8")
+with contextlib.ExitStack() as stack:
+    files = [stack.enter_context(open(p, encoding="utf-8")) for p in paths]
+    print([f.read().strip() for f in files])  # ALL closed at block end (even mid-error!)
+for p in paths:
+    Path(p).unlink()
+print("all closed ✓")</code></pre><div class="out">stacked: {'a': 1} {'b': 2}
+['f1.tmp', 'f2.tmp']
+all closed ✓</div></div>
+<table><tr><th>Real-world CM</th><th>Setup → teardown</th><th>Notes</th></tr>
+<tr><td><code>open(…)</code></td><td>open → flush + close</td><td>Ch. 15's flagship (buffered data safe)</td></tr>
+<tr><td><code>threading.Lock()</code></td><td>acquire → release</td><td>Deadlock-proof pairing (never forget release!)</td></tr>
+<tr><td>DB transactions</td><td>begin → commit / rollback-on-error</td><td><code>__exit__</code> branches on exc_type (the pattern's apex!)</td></tr>
+<tr><td><code>tempfile.TemporaryDirectory()</code></td><td>mkdtemp → shutil.rmtree</td><td>Scratch space that cleans itself</td></tr>
+<tr><td><code>redirect_stdout(io.StringIO())</code></td><td>swap → restore</td><td>Capture prints in tests (Ch. 23!)</td></tr>
+<tr><td><code>decimal.localcontext()</code></td><td>push precision → pop</td><td>Scoped numeric config</td></tr></table>
+
+<h3>21.8 Interview questions</h3>
+<details><summary>Q1: What does @deco do — exactly, in which phase? Why functools.wraps? The three wrapper rules?</summary><div class="inner"><code>@d def f</code> ≡ <code>f = d(f)</code> at <em>definition time</em>; decorator returns (usually) a closure wrapper becoming the name; calls hit the wrapper → before/after + call-through. <code>wraps</code> preserves <code>__name__/__doc__/__module__</code> + <code>__wrapped__</code> (introspection/docs/stackability). Rules: <code>(*a, **k)</code> signature, <code>return fn(*a, **k)</code>, <code>wraps</code> — violate any and decorated functions degrade (None-machine/arities/identity-theft).</div></details>
+<details><summary>Q2: Decorators with arguments — the three levels? Stacking order semantics?</summary><div class="inner">Factory(config) → decorator(fn) → wrapper(*a/**k): <code>@retry(n=3)</code> calls the factory first. Stacking: <code>@a @b def f</code> = <code>a(b(f))</code> — bottom applies first (innermost, touches original), top runs first/last per call. Order is behavior (cache-inside-retry vs retry-inside-cache differ!) — argue from the call path.</div></details>
+<details><summary>Q3: How does `with` guarantee cleanup? Class vs @contextmanager? Suppression semantics?</summary><div class="inner"><code>__enter__</code> → body → <code>__exit__(type, val, tb)</code> unconditionally (normal/exception/return/break). Generator-CMs: pre-yield = enter, <code>try/finally</code> around yield = teardown (mandatory pattern!). Truthy <code>__exit__</code> return suppresses the body exception (rare/deliberate — prefer <code>contextlib.suppress</code> for visibility). DB transactions branch commit/rollback on exc presence.</div></details>
+
+<h3>21.9 Exercises</h3>
+<div class="ex L1"><span class="pill">Level 1 · Understand</span><ol><li>Expand <code>@timer def f</code> to <code>f = timer(f)</code>; draw definition-time vs call-time phases with the closure's captured names.</li><li>Show <code>__name__/__doc__</code> with and without <code>wraps</code>; show <code>__wrapped__</code> recovery. Break stacking without wraps (two undecorated layers) and describe symptoms.</li><li>Write a class CM logging enter/body-outcome/exit for normal + raising bodies; show <code>__exit__</code> args in both.</li></ol></div>
+<div class="ex L2"><span class="pill">Level 2 · Apply</span><ol><li><code>@retry(times, delay, allowed, backoff=2.0)</code> with exponential backoff + jitter; prove exhaustion re-raises the LAST error (traceback intact).</li><li><code>@contextmanager cd(path)</code> + <code>temp_env(var, value)</code> (os.environ save/restore); test exception-path restoration for both.</li><li>Stack <code>@timer @retry @lru_cache</code> on a flaky fib: predict behavior per order, verify with probes, defend the right order in comments.</li></ol></div>
+<div class="ex L3"><span class="pill">Level 3 · Interview</span><ol><li>Implement a mini transaction CM over a dict-store (snapshot on enter; commit on clean exit; rollback on exception; nested-transaction behavior documented). Test all paths.</li><li>Write a decorator preserving <code>inspect.signature</code> strictly (investigate <code>__wrapped__</code> chaining + <code>inspect.signature(follow_wrapped=True)</code>); then break it with <code>*a/**k</code> opacity and discuss ParamSpec as the principled fix.</li></ol></div>
+<h3>21.10 Mini-challenge 🏆</h3>
+<div class="ex L2"><span class="pill">Challenge</span><p><strong>Build <code>patterns_lab.py</code>.</strong> A flaky "remote fetch" (random failures) wrapped in <code>@timer @retry(times=4, backoff) @lru_cache</code> + a <code>fetch_session()</code> CM (setup/teardown logging + failure counting) + a <code>RateLimit</code> class CM (min-interval between enters, sleeping as needed). Run 20 fetches; report timings, retries, cache hits, rate compliance. Decorators + CMs composing under load — production patterns in miniature.</p></div>
+<div class="callout good"><strong class="t">🏁 Chapter summary → next</strong><strong>Remember:</strong> <code>@d</code> = <code>f = d(f)</code> at def-time (closure wrapper + <code>wraps</code> + <code>return fn(*a, **k)</code>) · factories add a level (config → decorator → wrapper) · stacking = outside-in per call (order is behavior!) · <code>with</code> = enter → body → exit-always (exit sees the outcome; truthy suppresses) · generator CMs = one yield in try/finally · ExitStack for dynamic N · register-pattern for plugins. <strong>Next:</strong> Chapter 22 — debugging at full depth: the professional workflow, tracebacks, pdb, and strategy tables.</div>
+</div></section>

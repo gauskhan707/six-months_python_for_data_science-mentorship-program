@@ -1,0 +1,182 @@
+<!-- CHAPTER 10 -->
+<section class="chapter" id="ch10">
+<div class="ch-head"><div class="ch-num">10</div><div><div class="kicker">Control flow</div><h2>Loops</h2></div><div class="ch-tools"><button class="icon-btn bm" title="Bookmark">☆</button><button class="icon-btn done" title="Mark complete">✓</button><span class="chev">▾</span></div></div>
+<div class="ch-body">
+<p><strong>What/why.</strong> Loops repeat work: <code>for</code> iterates over a <em>known collection</em> ("for each row…"), <code>while</code> repeats <em>until a condition changes</em> ("while retries remain…"). Python's <code>for</code> is a <strong>for-each</strong> over <em>iterables</em> (Chapter 19's protocol) — there is no C-style index loop, because <code>enumerate/range</code> cover those cases readably. The senior skill has two halves: <em>choosing the right iteration tool</em> (range/enumerate/zip/dict-views/generators) and <em>recognizing when a vectorized operation or builtin should replace the loop entirely</em> (the Ch. 24 ladder).</p>
+
+<h3>10.1 for: the for-each philosophy + range, enumerate, zip</h3>
+<p><strong>What.</strong> <code>for VAR in ITERABLE:</code> binds <code>VAR</code> to each item in turn and runs the block. The loop variable <em>leaks</em> (it survives after the loop, holding the last item — §10.5). Loop over <em>values directly</em>; reach for indices only when mutation-by-position or parallel structure demands it.</p>
+<div class="code-block"><div class="code-head">iteration toolkit, completely <button class="copy-btn">Copy</button></div><pre><code>for i in range(3):            # range(stop): 0,1,2 — LAZY (O(1) memory!)
+    print(i, end=" ")
+print()
+for i in range(2, 11, 3):     # range(start, stop-EXCLUSIVE, step)
+    print(i, end=" ")
+print()
+for i in range(5, 0, -1):     # countdown (negative step)
+    print(i, end=" ")
+print()
+names = ["Ali", "Zara"]
+for i, n in enumerate(names, start=1):  # index + value (BEST general loop)
+    print(f"{i}. {n}")
+for n, s in zip(names, [88, 95]):       # PARALLEL — STOPS AT SHORTEST!
+    print(n, s)
+for n, s in zip(names, [88]):           # Zara silently DROPPED (length mismatch!)
+    print("short:", n, s)
+for k, v in {"a": 1, "b": 2}.items():   # dicts via .items() (never index a dict!)
+    print(k, v)</code></pre><div class="out">0 1 2 
+2 5 8 
+5 4 3 2 1 
+1. Ali
+2. Zara
+Ali 88
+Zara 95
+short: Ali 88
+a 1
+b 2</div></div>
+<p><strong>Step-by-step (<code>range</code> laziness).</strong> <code>range(10**9)</code> stores three integers (start/stop/step, ~48 bytes) and <em>computes each value on demand</em> — it never materializes a billion-item list. <code>list(range(10**9))</code> would attempt exactly that (~8 GB → MemoryError/death). Rule: <code>range</code> is for <em>counting/looping</em>; only <code>list()</code> it when tiny and genuinely needed as data.</p>
+<p><strong><code>zip` strictness (3.10+).</strong> Silent truncation hides length-mismatch bugs (dropped students, misaligned columns!). <code>zip(a, b, strict=True)</code> raises <code>ValueError</code> on unequal lengths — use it whenever inputs <em>must</em> align (parallel columns, paired tests). For intentionally-uneven pairing, <code>itertools.zip_longest</code> fills gaps with a <code>fillvalue` (Chapter 20).</p>
+<div class="callout warn"><strong class="t">⚠️ Loop anti-patterns (unlearn these)</strong><code>for i in range(len(xs)): x = xs[i]</code> → <code>for x in xs:</code> (direct!) or <code>enumerate</code> (need index). <code>i = 0; for x in xs: …; i += 1</code> → <code>enumerate</code>. <code>while i &lt; len(xs): … i += 1</code> → <code>for</code>. Manual indexing is slower, longer, and off-by-one-prone — the <code>for</code>-each exists to delete it.</div>
+
+<h3>10.2 while: condition-driven repetition + guaranteed progress</h3>
+<p><strong>What.</strong> <code>while COND:</code> tests before <em>every</em> round (including the first — possibly zero rounds) and repeats while True. Correctness demands <strong>guaranteed progress</strong>: something in the body must move the state toward falsifying the condition, on <em>every possible path</em> (including <code>continue</code>-skipped ones — §10.3).</p>
+<div class="code-block"><div class="code-head">while patterns: countdown, retry-bounded, sentinel, Newton <button class="copy-btn">Copy</button></div><pre><code># 1. Countdown (progress: attempts decreases every round)
+attempts = 3
+while attempts &gt; 0:
+    print("try, left:", attempts)
+    attempts -= 1
+# 2. Bounded retry (progress: tries increases; CAP prevents infinity)
+tries, ok = 0, False
+while not ok and tries &lt; 5:
+    tries += 1
+    ok = (tries == 3)      # pretend flaky work succeeds on try 3
+print("succeeded after", tries)
+# 3. Sentinel processing (progress: items consumed)
+items = [3, 1, 0, 9]
+while items:
+    x = items.pop(0)       # shrinks every round → terminates (O(n²) though — deque!)
+    if x == 0:
+        print("hit zero, stop"); break
+    print("saw", x)
+# 4. Converge (progress: guess improves; tolerance + cap BOTH required!)
+guess, target, iters = 10.0, 2.0, 0
+while abs(guess*guess - target) &gt; 1e-9 and iters &lt; 100:  # float==never! tolerance!
+    guess = (guess + target/guess) / 2   # Newton step for sqrt
+    iters += 1
+print("sqrt(2)≈", guess, "in", iters, "iters")</code></pre><div class="out">try, left: 3
+try, left: 2
+try, left: 1
+succeeded after 3
+saw 3
+saw 1
+hit zero, stop
+sqrt(2)≈ 1.4142135623730954 in 7 iters</div></div>
+<p><strong>Why <code>while True + break</code> is legitimate (with discipline).</strong> For "loop until something <em>inside</em> decides" (event loops, input validation, servers), testing at the top is awkward — <code>while True:</code> with clearly-visible <code>break</code>s reads better. Discipline: every <code>while True</code> needs an <em>obviously reachable</em> break (preferably first-screen visible) — and for anything that could spin forever, a trip-count/iteration cap or timeout.</p>
+<div class="callout bad"><strong class="t">🛠️ Infinite-loop rescue + prevention</strong>Hung? <code>Ctrl+C</code> (KeyboardInterrupt) — in notebooks, ⬛ Stop/Interrupt kernel. Then audit: ① does the condition variable change on <em>every</em> path (or does <code>continue</code> skip the update)? ② float equality that never hits (<code>while x != 0.3:</code> — use tolerance!)? ③ <code>break</code> actually reachable? Prevention: prefer bounded <code>for</code> (<code>range(max_tries)</code>) whenever a cap exists — bounded loops <em>can't</em> hang.</div>
+
+<h3>10.3 break / continue / pass / else — the full control panel</h3>
+<div class="diagram"><strong>Figure 10.1 — Loop execution map</strong><div class="flow"><div class="fstep">test condition / fetch next item</div><div class="farrow">↓ enter round</div><div class="fstep"><code>continue</code> → abandon round, jump to next test/fetch &nbsp;·&nbsp; <code>break</code> → exit loop NOW &nbsp;·&nbsp; <code>pass</code> → no-op placeholder</div><div class="farrow">↓ loop finishes</div><div class="fstep"><code>else</code> runs ONLY if the loop ended WITHOUT <code>break</code> (natural exhaustion)</div></div></div>
+<div class="code-block"><div class="code-head">control statements, each proven <button class="copy-btn">Copy</button></div><pre><code># continue: skip noise, keep signal
+for x in [1, -2, 3, -4, 5]:
+    if x &lt; 0:
+        continue          # abandon THIS round (negatives skipped)
+    print(x, end=" ")
+print()
+# break + for-else: search WITHOUT flag variables
+nums = [5, 7, 9]
+for n in nums:
+    if n % 2 == 0:
+        print("found even:", n)
+        break             # exit NOW — else SKIPPED
+else:                     # runs: loop exhausted WITHOUT break
+    print("no even number")
+# while-else: same rule (else skipped on break)
+count = 0
+while count &lt; 3:
+    count += 1
+else:
+    print("counted to", count)  # counted to 3
+# pass: syntactic placeholder (empty block would be IndentationError)
+for x in []:
+    pass  # TODO: handle empty case later</code></pre><div class="out">1 3 5 
+no even number
+counted to 3</div></div>
+<p><strong>Step-by-step (for-else).</strong> Each round: even? No (5, 7, 9 all odd) → no break → fetch next. Iterator exhausts → loop ends <em>naturally</em> → <code>else</code> runs. Had any round hit <code>break</code>, control would jump <em>past</em> the <code>else</code>. Mnemonic: <code>else</code> = "no-break" (think <code>nobreak</code>). Uses: search-miss handling, prime testing (no divisor found), validation (no violation found) — all without a <code>found = False</code> flag.</p>
+<div class="callout warn"><strong class="t">⚠️ break/continue scope: ONE level only</strong>In nested loops, <code>break</code> exits only the <em>innermost</em> loop. To exit multiple levels: extract a function and <code>return</code> (best), set a flag + break twice (meh), or raise a private exception (rare). If you need labeled-break, you need a function.</div>
+
+<h3>10.4 Nested loops: pairs, grids, and the O(n²) price tag</h3>
+<div class="code-block"><div class="code-head">nested loops: pairs, table, early exit via function <button class="copy-btn">Copy</button></div><pre><code># All pairs (i, j) with i != j — O(n²) rounds
+vals = [1, 2, 3]
+pairs = []
+for a in vals:            # outer: n rounds
+    for b in vals:        # inner: n rounds PER outer → n² total
+        if a != b:
+            pairs.append((a, b))
+print(pairs)  # 6 pairs from n=3
+# Multiplication table (nested + str.join formatting):
+for r in range(1, 4):
+    print(" ".join(f"{r*c:2d}" for c in range(1, 4)))
+# Early multi-level exit: FUNCTION + return (the clean pattern)
+def find_first_pair_summing_to(xs, target):
+    for i, a in enumerate(xs):
+        for j in range(i + 1, len(xs)):
+            if a + xs[j] == target:
+                return (i, j)   # exits BOTH loops instantly
+    return None
+print(find_first_pair_summing_to([2, 7, 11, 15], 9))  # (0, 1)</code></pre><div class="out">[(1, 2), (1, 3), (2, 1), (2, 3), (3, 1), (3, 2)]
+ 1  2  3
+ 2  4  6
+ 3  6  9
+(0, 1)</div></div>
+<p><strong>Cost intuition.</strong> n=100 → 10,000 inner rounds; n=10,000 → 100,000,000 (minutes). Nested loops over the <em>same large data</em> are the #1 accidental-quadratic (Chapter 24) — always ask: "can a set/dict (Ch. 8) replace the inner loop?" (§10.6's two-sum is the canonical rescue: O(n²) → O(n)).</p>
+
+<h3>10.5 Loop variables leak + the iteration protocol (preview)</h3>
+<div class="code-block"><div class="code-head">leak demo + what for really does <button class="copy-btn">Copy</button></div><pre><code>for i in range(3):
+    pass
+print("leaked i =", i)   # 2 — for-targets bind in the ENCLOSING scope (no block scope!)
+# Comprehension variables do NOT leak (3+): [j for j in range(3)] → j undefined after
+# What `for x in xs:` ACTUALLY does (Chapter 19's protocol, previewed):
+xs = [10, 20]
+it = iter(xs)            # 1. ask for an iterator (cursor)
+while True:              # 2. fetch until exhausted
+    try:
+        x = next(it)     # 3. next item (raises StopIteration at end)
+    except StopIteration:
+        break            # 4. for-loops catch this SILENTLY and exit
+    print("item:", x)</code></pre><div class="out">leaked i = 2
+item: 10
+item: 20</div></div>
+<p><strong>Why this matters now.</strong> The leak explains "mystery variable" bugs (a stale <code>i</code> reused later — use fresh names or functions to contain loops). The protocol explains <em>everything iterable</em>: strings, files, generators, dicts, ranges, zips — all work in <code>for</code> because all answer <code>iter()</code>/<code>next()</code>. Chapter 19 turns this preview into full mastery (including writing your own iterables).</p>
+
+<h3>10.6 When NOT to loop: the replacement ladder</h3>
+<p><strong>What.</strong> Explicit loops are the <em>clearest</em> tool for complex per-item logic — and the <em>slowest</em> for simple bulk transforms. Climb this ladder deliberately:</p>
+<table><tr><th>Rung</th><th>Form</th><th>When</th></tr>
+<tr><td>① Explicit loop</td><td><code>for x in xs: …</code></td><td>Complex logic, side effects, early exit, per-item errors</td></tr>
+<tr><td>② Comprehension</td><td><code>[f(x) for x in xs if p(x)]</code></td><td>Transform + filter → new collection (Ch. 13)</td></tr>
+<tr><td>③ Builtin</td><td><code>sum / min / max / any / all / join</code></td><td>Reductions — C-speed, zero bookkeeping</td></tr>
+<tr><td>④ Stdlib algorithm</td><td><code>Counter / groupby / heapq / bisect</code></td><td>Counting, grouping, top-N, searching sorted data</td></tr>
+<tr><td>⑤ Vectorized (Part 2)</td><td>NumPy/Pandas ops</td><td>Numeric bulk work at scale (10–100×, Ch. 24)</td></tr></table>
+<div class="code-block"><div class="code-head">climbing the ladder on one task (sum of even squares) <button class="copy-btn">Copy</button></div><pre><code>xs = [1, 2, 3, 4, 5]
+total = 0                       # ① loop: clearest, slowest
+for x in xs:
+    if x % 2 == 0:
+        total += x * x
+print(total)                    # 20
+print(sum(x*x for x in xs if x % 2 == 0))  # ②+③: generator + builtin — best pure-Python
+# ⑤ vectorized (Part 2): import numpy as np; a = np.array(xs); print(((a[a%2==0])**2).sum())</code></pre><div class="out">20
+20</div></div>
+<div class="callout good"><strong class="t">✅ Rule of thumb</strong>Under ~10k items, write whatever is <em>clearest</em> (usually ①/②). Over ~100k in hot paths, climb to ③/④/⑤ — after <em>profiling</em> (Chapter 24). Premature vectorization of cold code wastes readability for zero user-visible gain.</div>
+
+<h3>10.7 Interview questions</h3>
+<details><summary>Q1: What does for-else / while-else do? Give a use case that avoids a flag.</summary><div class="inner"><code>else</code> runs iff the loop exhausted <em>without</em> <code>break</code> (mnemonic: "no-break"). Use: search patterns — break on found, else = not-found handling. Example: prime test (break on divisor, else prime), validation (break on violation, else valid).</div></details>
+<details><summary>Q2: range vs list(range) — memory, and the rule?</summary><div class="inner"><code>range</code> stores start/stop/step (~48B) and computes on demand — O(1) memory for any size. <code>list(range(n))</code> materializes n objects — O(n) memory (billions = death). Rule: loop over <code>range</code> directly; <code>list()</code> only tiny ranges genuinely needed as data.</div></details>
+<details><summary>Q3: How do you exit nested loops cleanly? Why not flag-chains?</summary><div class="inner">Extract a function and <code>return</code> (exits all levels instantly, names the search, testable). Flag + double-break works but litters logic and breaks down at 3 levels. (Python has no labeled break by design — functions are the answer.)</div></details>
+<details><summary>Q4: Solve two-sum in O(n) and explain why nested loops lose.</summary><div class="inner">Single pass with a seen-dict: for each x, check if <code>target - x</code> was seen (O(1) hash); else store x. O(n) time, O(n) space. Nested loops re-scan the tail per element — O(n²) time (10k items: 100M ops vs 10k). General lesson: inner-loop scans → hash lookups.</div></details>
+
+<h3>10.8 Exercises</h3>
+<div class="ex L1"><span class="pill">Level 1 · Understand</span><ol><li>Hand-trace <code>list(range(1, 10, 3))</code>, <code>list(range(5, 0, -2))</code>, <code>list(range(0))</code>; verify. Explain why <code>range(3, 3)</code> is empty.</li><li>Rewrite a <code>while</code> countdown as <code>for</code>-over-<code>range</code>. Which is safer against infinity and why?</li><li>Demonstrate the loop-variable leak; then show a comprehension variable NOT leaking. Explain (function scope vs comprehension scope — Ch. 12 preview).</li></ol></div>
+<div class="ex L2"><span class="pill">Level 2 · Apply</span><ol><li>FizzBuzz 1–30 as a loop, then as a comprehension building a list of strings. Which reads better? (Defend your answer.)</li><li><code>find_first_even(nums)</code> with for-else (no flags); <code>all_positive(nums)</code> with while-else. Test empty inputs — what SHOULD they return?</li><li><code>zip(a, b, strict=True)</code>: show it catching a misalignment your silent <code>zip</code> hid. Then solve the same task with <code>itertools.zip_longest</code>.</li></ol></div>
+<div class="ex L3"><span class="pill">Level 3 · Interview</span><ol><li>Two-sum O(n) with dict (§10.7 Q4) + prove the complexity; then extend to return ALL pairs. What changes?</li><li>Benchmark loop-sum vs generator+<code>sum</code> vs NumPy-sum at n=10⁶; place each on the §10.6 ladder with measured ratios.</li></ol></div>
+<h3>10.9 Mini-challenge 🏆</h3>
+<div class="ex L2"><span class="pill">Challenge</span><p><strong>Build <code>loop_lab.py</code>.</strong> Implement FizzBuzz FIVE ways (loop, comprehension, generator+join, function-mapped, while) + a prime-finder with for-else + a bounded-retry input prompter (3 tries, then give up gracefully). Time all five FizzBuzzes at n=100k with <code>time.perf_counter</code>. The point isn't speed — it's proving you can reach any rung of the ladder on demand.</p></div>
+<div class="callout good"><strong class="t">🏁 Chapter summary → next</strong><strong>Remember:</strong> <code>for</code> = for-each (values direct; <code>enumerate/zip/items</code>; <code>strict=True</code> for alignment) · <code>range</code> lazy O(1) · <code>while</code> needs guaranteed progress + caps (tolerance for floats!) · <code>break/continue</code> one level; <code>else</code> = no-break · nested = O(n²) (hash the inner loop away) · loop vars leak · climb the replacement ladder deliberately. <strong>Next:</strong> Chapter 11 — functions, the deepest chapter: abstraction, arguments, returns, recursion, closures, and decorators-from-first-principles.</div>
+</div></section>

@@ -1,0 +1,130 @@
+<!-- CHAPTER 4 -->
+<section class="chapter" id="ch04">
+<div class="ch-head"><div class="ch-num">4</div><div><div class="kicker">Core data</div><h2>Python Data Types</h2></div><div class="ch-tools"><button class="icon-btn bm" title="Bookmark">☆</button><button class="icon-btn done" title="Mark complete">✓</button><span class="chev">▾</span></div></div>
+<div class="ch-body">
+<p><strong>Map of the territory.</strong> Every value in Python is an object of one built-in type. Master this chapter and you can <em>read</em> almost any program: numbers compute, strings carry text, <code>None</code> means "missing", and four collections (<code>list/tuple/set/dict</code>) organize everything else. Each type gets its full-depth chapter later (strings → Ch. 6, lists → Ch. 7, the rest → Ch. 8) — here you learn every type's <strong>purpose, properties, and when to choose which</strong>, with numbers and truthiness covered completely since later chapters assume them.</p>
+<table><tr><th>Type</th><th>Example</th><th>Mutable?</th><th>Ordered?</th><th>Core use</th></tr>
+<tr><td><code>int</code></td><td><code>42, -7, 10**100</code></td><td>✗</td><td>—</td><td>Counts, indices, exact integers (arbitrary precision)</td></tr>
+<tr><td><code>float</code></td><td><code>3.14, 2.5e-3</code></td><td>✗</td><td>—</td><td>Measurements, continuous values (binary approx!)</td></tr>
+<tr><td><code>complex</code></td><td><code>3+4j</code></td><td>✗</td><td>—</td><td>Engineering math, signals, rotations</td></tr>
+<tr><td><code>bool</code></td><td><code>True, False</code></td><td>✗</td><td>—</td><td>Logic, flags (<code>bool ⊂ int</code>!)</td></tr>
+<tr><td><code>str</code></td><td><code>"hello"</code></td><td>✗</td><td>✓ (chars)</td><td>Text, IDs, categories</td></tr>
+<tr><td><code>NoneType</code></td><td><code>None</code></td><td>✗</td><td>—</td><td>"No value" — the billion-dollar sentinel, done right</td></tr>
+<tr><td><code>list</code></td><td><code>[1, 2, 3]</code></td><td>✓</td><td>✓</td><td>Ordered, changeable sequences</td></tr>
+<tr><td><code>tuple</code></td><td><code>(1, 2)</code></td><td>✗</td><td>✓</td><td>Fixed records, dict keys, safe returns</td></tr>
+<tr><td><code>set</code></td><td><code>{1, 2}</code></td><td>✓</td><td>✗</td><td>Uniqueness, membership, group math</td></tr>
+<tr><td><code>dict</code></td><td><code>{"a": 1}</code></td><td>✓</td><td>✓ (insertion)</td><td>Labeled lookups, records, JSON-like data</td></tr></table>
+
+<h3>4.1 int: exact integers with no ceiling</h3>
+<p><strong>What.</strong> <code>int</code> represents whole numbers — positive, negative, zero — with <strong>arbitrary precision</strong>: unlike C's 32/64-bit ints, Python ints <em>never overflow</em>; they grow as large as memory allows. Immutable.</p>
+<p><strong>Why it exists.</strong> Counting, indexing, and exact discrete math must be <em>exactly right</em>: row counts, IDs, loop bounds, money-in-cents. A language for data cannot silently wrap <code>2_147_483_647 + 1</code> to a negative number (as fixed-width ints do) — Python refuses that entire bug class by growing digits on demand.</p>
+<p><strong>Intuition.</strong> Think of an int as a <em>rubber number line</em>: it stretches however far you need. The cost is tiny (a few dozen bytes + ~30 bits per "digit" limb) and operations stay fast until numbers reach thousands of digits — at which point you're doing cryptography or combinatorics, not averages.</p>
+<div class="code-block"><div class="code-head">ints: literals, bases, bigness <button class="copy-btn">Copy</button></div><pre><code>print(10**100)                 # googol — exact, no overflow, no sweat
+print(1_000_000)                # underscores group digits (readability; ignored)
+print(0xFF, 0o17, 0b101)        # hex, octal, binary literals → 255 15 5
+print(int("FF", 16), int("101", 2))  # parse other bases → 255 5
+print(bin(255), hex(255), oct(15))   # format back out
+print(7 // 2, 7 % 2, divmod(7, 2))   # 3 1 (3, 1) — divmod does both at once</code></pre><div class="out">10000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+1000000
+255 15 5
+255 5
+0b11111111 0xff 0o17
+3 1 (3, 1)</div></div>
+<p><strong>Step-by-step (bases).</strong> <code>0xFF</code>: prefix <code>0x</code> = hexadecimal; digits <code>F,F</code> = 15×16 + 15 = 255. <code>int("FF", 16)</code> parses the <em>string</em> in base 16. <code>bin()/hex()/oct()</code> return <em>strings with prefixes</em> (<code>'0b…'</code>) — strip with <code>format(255, 'b')</code> for bare digits. These matter for flags, colors, encodings, and bit work (Chapter 5).</p>
+<div class="callout warn"><strong class="t">⚠️ Common mistakes</strong>Leading zeros forbidden (<code>09</code> → SyntaxError — legacy octal confusion; write <code>9</code> or <code>0o9</code>… which is also invalid: octal digits are 0–7!). <code>int(3.99)</code> → <code>3</code> (truncation, not rounding — §3.6). <code>int("3.5")</code> → ValueError (chain <code>int(float(…))</code>). Division <code>/</code> <em>always</em> yields float (<code>4/2</code> → <code>2.0</code>) — use <code>//</code> for int division.</div>
+<p><strong>📊 Data-Science connection.</strong> Counts, ages-in-years, quantities, IDs, indices, and <em>money in cents</em> are ints. Pandas nullable <code>Int64</code> exists precisely becauseNumPy's raw ints can't hold missing values — a preview of why "which int?" becomes a real question in Part 2.</p>
+
+<h3>4.2 float: real-world measurements, honestly approximated</h3>
+<p><strong>What.</strong> <code>float</code> implements IEEE-754 double-precision binary floating point: ~15–17 significant decimal digits, range ±10³⁰⁸. Immutable. Literals: <code>3.14, -0.5, 2.5e-3</code> (= 0.0025), <code>1e6</code>, <code>float("inf")</code>, <code>float("nan")</code>.</p>
+<p><strong>Why it exists.</strong> Measurements are continuous (temperature, price, probability) and need huge dynamic range (astronomical distances to subatomic masses) with fast hardware-supported arithmetic. Floats trade <em>exactness</em> for <em>range + speed</em> — the right trade for science, the wrong one for money.</p>
+<p><strong>Intuition: why <code>0.1 + 0.2 != 0.3</code>.</strong> Floats store numbers as <em>binary fractions</em> (sums of 1/2, 1/4, 1/8…). Just as 1/3 has no exact <em>decimal</em> expansion (0.333…), 0.1 has no exact <em>binary</em> expansion — it's stored as the closest 53-bit approximation, off by ~10⁻¹⁷. Adding two approximations compounds the dust: <code>0.1 + 0.2</code> → <code>0.30000000000000004</code>. This is <em>not a Python bug</em> — it's IEEE-754, identical in C, Java, JavaScript, and Excel's engine.</p>
+<div class="code-block"><div class="code-head">float truth + correct comparison <button class="copy-btn">Copy</button></div><pre><code>print(0.1 + 0.2)              # 0.30000000000000004 — the dust is visible
+print(0.1 + 0.2 == 0.3)       # False — NEVER compare floats with ==
+import math
+print(math.isclose(0.1 + 0.2, 0.3))            # True — tolerance-based ✓
+print(math.isclose(1000.0, 1000.0000001))      # True (relative tolerance default 1e-09)
+print(f"{0.1 + 0.2:.1f}")     # '0.3' — formatting HIDES dust (display ≠ value!)
+print(1e16 + 1.0 == 1e16)     # True(!) — 1.0 lost below float resolution at 1e16</code></pre><div class="out">0.30000000000000004
+False
+True
+True
+0.3
+True</div></div>
+<p><strong>Step-by-step (the last line).</strong> At magnitude 10¹⁶, adjacent floats are 2.0 apart — <code>1e16 + 1.0</code> rounds back to <code>1e16</code>. Lesson: floats have <em>relative</em>, not absolute, precision (~16 digits wherever the point floats). Accumulating millions of tiny values into a huge total <em>loses</em> the tiny ones — sum small-first, or use <code>math.fsum</code> (exact correctly-rounded summation).</p>
+<div class="callout bad"><strong class="t">🚫 Money rule (non-negotiable)</strong>Never use floats for currency. <code>0.1 + 0.2</code> dust becomes real cents. Correct approaches: (1) <strong>integer cents</strong> (<code>210 + 345 = 555¢</code>), or (2) <strong><code>decimal.Decimal</code></strong> (base-10 exact: <code>Decimal("0.1") + Decimal("0.2") == Decimal("0.3") → True</code>). Construct Decimals from <em>strings</em> (<code>Decimal("0.1")</code>), never from floats (<code>Decimal(0.1)</code> preserves the binary dust!).</div>
+<p><strong>Special values.</strong> <code>float("inf")</code> (bigger than everything — handy as initial "best" in min-searches), <code>float("-inf")</code>, <code>float("nan")</code> (poison: <em>every</em> comparison False, even <code>nan == nan</code>! test with <code>math.isnan</code>). Pandas' missing-value machinery (<code>NaN</code>) inherits exactly these semantics — learn them here, suffer less there.</p>
+
+<h3>4.3 complex and numeric tower</h3>
+<p><strong>What.</strong> <code>complex</code> stores <code>real + imag·j</code> (engineers' <code>j</code>, not mathematicians' <code>i</code>): <code>z = 3 + 4j</code>, attributes <code>z.real/z.imag</code>, <code>abs(z)</code> = magnitude (5.0), <code>z.conjugate()</code>. Full arithmetic supported; <code>cmath</code> provides complex math functions.</p>
+<p><strong>Why it exists + when you'll meet it.</strong> Signals, rotations, oscillations, Fourier transforms, control systems, quantum basics. Most data scientists meet complex numbers via <code>numpy.fft</code> (frequency analysis) — knowing the literal syntax and <code>abs()</code>-as-magnitude is enough until then.</p>
+<div class="code-block"><div class="code-head">complex essentials <button class="copy-btn">Copy</button></div><pre><code>z = 3 + 4j
+print(z.real, z.imag, abs(z))  # 3.0 4.0 5.0 (3-4-5 triangle!)
+print(z * 1j)                  # (-4+3j) — multiplying by j rotates 90°
+print(complex(2, -1))          # (2-1j) — constructor form
+# Numeric tower: int → float → complex (operations promote upward)
+print(type(1 + 2.0), type(1 + 2j))  # float complex</code></pre><div class="out">3.0 4.0 5.0
+(-4+3j)
+(2-1j)
+&lt;class 'float'&gt; &lt;class 'complex'&gt;</div></div>
+
+<h3>4.4 bool: logic's two values (and their secret integer life)</h3>
+<p><strong>What.</strong> Exactly two singleton objects exist: <code>True</code> and <code>False</code> (capitalized keywords). They are the result type of every comparison and the currency of <code>if/while/and/or/not</code>. <strong>The secret:</strong> <code>bool</code> is a <em>subclass of <code>int</code></em> — <code>True == 1</code>, <code>False == 0</code>, and <code>True + True == 2</code>.</p>
+<p><strong>Why bool ⊂ int.</strong> Historical pragmatism (booleans arrived late, in Python 2.3, and had to interoperate with code using 0/1) that became a beloved feature: <code>sum(scores) / len(scores)</code> for pass-rates via <code>sum(s &gt;= 60 for s in scores)</code> — counting Trues by summation. It also means: check <code>isinstance(x, bool)</code> <em>before</em> <code>isinstance(x, int)</code> when the distinction matters (Chapter 9's <code>describe_value</code>), since every bool passes the int test.</p>
+<p><strong>Truthiness — the concept Chapter 9 runs on.</strong> Every object is inherently truthy or falsy in boolean context. <strong>Falsy (the complete list):</strong> <code>False, None, 0, 0.0, 0j, "", b"", [], {}, set(), frozenset(), range(0)</code>, and objects whose class defines <code>__bool__</code>/<code>__len__</code> returning False/0. <strong>Everything else is truthy</strong> — including <code>"False"</code>, <code>"0"</code>, <code>[0]</code>, <code>{"a": 0}</code>, and all nonzero numbers.</p>
+<div class="code-block"><div class="code-head">bool arithmetic + truthiness preview <button class="copy-btn">Copy</button></div><pre><code>print(True + True + False)    # 2 — counting by summation
+print(sum([True, False, True]))  # 2
+print(isinstance(True, int), isinstance(True, bool))  # True True
+print(bool(0), bool(""), bool([]), bool(None))     # all False
+print(bool("False"), bool([0]), bool(0.0001))      # all True(!)</code></pre><div class="out">2
+2
+True True
+False False False False
+True True True</div></div>
+<div class="callout warn"><strong class="t">⚠️ Common mistakes</strong><code>if x == True:</code> → write <code>if x:</code> (full rules Ch. 9). <code>if age:</code> when <code>0</code> is a valid age → use <code>if age is not None:</code>. <code>True + 1</code> working surprises Java/C programmers — it's intentional, exploit it for counting.</div>
+
+<h3>4.5 str and None (essentials; full depth in Ch. 6)</h3>
+<p><strong>str — What/why.</strong> An immutable sequence of Unicode characters: names, categories, IDs, log lines, JSON payloads — most real-world data arrives as text. Single/double quotes identical; triple quotes span lines; <code>len()</code> counts <em>characters</em> (not bytes — Chapter 6's encoding section). Every "modification" builds a new string.</p>
+<p><strong>None — What/why.</strong> The sole inhabitant of <code>NoneType</code>: Python's first-class "nothing here", distinct from <code>0</code>, <code>""</code>, and <code>False</code>. It is the default function return (§2.2's <code>print</code> lesson), the standard "argument not provided" sentinel, and data's "missing" marker before Pandas' <code>NaN</code>. <strong>Always test with <code>is None</code> / <code>is not None</code></strong> — never <code>==</code> (a exotic <code>__eq__</code> could lie; identity with the singleton cannot).</p>
+<div class="code-block"><div class="code-head">None done right + the or-trap preview <button class="copy-btn">Copy</button></div><pre><code>value = None
+print(value is None)        # True — identity check (correct, always)
+print(value == None)        # True but WRONG STYLE — flagged by linters
+def find_user(uid):
+    return None             # explicit, honest "not found"
+print(find_user(7) or "anonymous")  # 'anonymous' — or returns first truthy (Ch. 5)
+# ⚠️ `x or default` breaks when x is valid-but-falsy (0, "", []):
+qty = 0
+print(qty or 10)                          # 10 — WRONG if 0 is a real quantity!
+print(qty if qty is not None else 10)     # 0 — correct: only None means missing</code></pre><div class="out">True
+True
+anonymous
+10
+0</div></div>
+
+<h3>4.6 Collections at a glance (full depth: Ch. 7–8)</h3>
+<div class="code-block"><div class="code-head">the big four in twelve lines <button class="copy-btn">Copy</button></div><pre><code>nums = [3, 1, 2]          # list: ordered, MUTABLE — sort in place
+nums.append(4); nums.sort()
+point = (10, 20)          # tuple: ordered, IMMUTABLE — a fixed record
+uniq = {1, 2, 2, 3}       # set: UNIQUE only → {1, 2, 3}, unordered
+user = {"name": "Ali", "age": 30}  # dict: LABEL → value lookups
+print(nums, point, uniq, user["name"])
+print({})                 # {} is an empty DICT — empty set is set()!
+print(type((5)), type((5,)))  # int vs tuple — the comma makes the tuple</code></pre><div class="out">[1, 2, 3, 4] (10, 20) {1, 2, 3} Ali
+{}
+&lt;class 'int'&gt; &lt;class 'tuple'&gt;</div></div>
+<p><strong>Choosing — the decision tree to memorize:</strong> need <em>labels/keys</em>? → <code>dict</code>. Need <em>uniqueness</em> or group math? → <code>set</code>. Need a <em>fixed record</em> that must never change (coordinates, RGB, dict key)? → <code>tuple</code>. Otherwise <em>ordered + changeable</em>? → <code>list</code>. Chapters 7–8 add the complexity table and 40+ methods behind these instincts.</p>
+<div class="vs"><div class="bad"><strong>❌ Classic traps</strong><ul><li><code>0.1+0.2 == 0.3</code> → False (§4.2)</li><li><code>"5" + 5</code> → TypeError (strong typing — convert!)</li><li><code>{}</code> is a dict; <code>(5)</code> is an int (quirks above)</li><li><code>[1,2] == [1,2]</code> True but <code>is</code> False (§3.2)</li></ul></div><div class="good"><strong>✅ DS type map</strong><ul><li>Column ≈ list · row/record ≈ tuple or dict · table ≈ list of dicts</li><li>IDs/categories → str · measurements → float · counts → int · flags → bool · missing → None → later <code>NaN</code></li><li>JSON ↔ dict/list/str/num/bool/None, one-to-one (Ch. 15)</li></ul></div></div>
+
+<h3>4.7 Interview questions</h3>
+<details><summary>Q1: Why is 0.1 + 0.2 != 0.3? How do you compare floats? What about money?</summary><div class="inner">Floats are base-2 fractions; 0.1 has no exact binary expansion, so tiny representation error compounds. Compare with <code>math.isclose(a, b)</code> (relative tolerance). Money: never floats — integer cents or <code>decimal.Decimal</code> constructed from strings.</div></details>
+<details><summary>Q2: How do you write an empty set? A one-element tuple? Why the quirks?</summary><div class="inner"><code>set()</code> — because <code>{}</code> was taken by the empty dict (dicts came first historically). <code>(5,)</code> — because <code>(5)</code> parses as parenthesized <code>5</code>; the comma is the tuple-maker, parens are just grouping.</div></details>
+<details><summary>Q3: Is bool a subclass of int? Prove it and name one consequence.</summary><div class="inner">Yes: <code>isinstance(True, int)</code> → True, <code>True + True == 2</code>. Consequence 1 (feature): count conditions with <code>sum()</code>. Consequence 2 (trap): <code>isinstance</code> checks for bool must precede int checks, or bools get misclassified as numbers.</div></details>
+<details><summary>Q4: None vs NaN vs 0 vs "" — when is each the right "missing"?</summary><div class="inner"><code>None</code>: Python-level "no value" (function results, optional fields). <code>NaN</code>: float-level missing inside numeric arrays (propagates through math; <code>nan != nan</code>). <code>0</code>/<code>""</code>: real values that happen to be falsy — using them as "missing" corrupts statistics. Pandas/NumPy (Part 2) formalize this into <code>NaN/NaT/pd.NA</code>.</div></details>
+
+<h3>4.8 Exercises</h3>
+<div class="ex L1"><span class="pill">Level 1 · Understand</span><ol><li>Without running, predict: <code>type(5), type(5.0), type("5"), type(True), type(None), type({}), type({1}), type((1,)), type(1_000), type(0x10)</code>. Then verify every one.</li><li>Explain in your own words: why <code>0.1+0.2==0.3</code> is False, why <code>math.isclose</code> fixes it, and why formatting (<code>f"{x:.1f}"</code>) only hides the issue.</li><li>List every falsy value from memory (§4.4). For each of <code>"False", [0], 0.0, {}, range(0)</code>, predict <code>bool()</code> then verify.</li></ol></div>
+<div class="ex L2"><span class="pill">Level 2 · Apply</span><ol><li>Represent 5 students (name, age, scores) three ways: list of dicts, dict of dicts keyed by id, list of tuples. Write one lookup in each; note the trade-offs.</li><li>Write <code>to_number(s)</code> returning int if the string is integral, else float if parseable, else None. Test 8 inputs including <code>"3.0", " 42 ", "abc", ""</code>.</li><li>Demonstrate float accumulation error: sum <code>[0.1]*10</code> vs <code>math.fsum([0.1]*10)</code> vs <code>Decimal</code> sum. Explain the three results.</li></ol></div>
+<div class="ex L3"><span class="pill">Level 3 · Interview</span><ol><li>Implement money-safe totals for <code>["2.10", "3.45", "0.1", "0.2"]</code> two ways (integer cents, Decimal). Show the float version failing and quantify the error in cents.</li><li>Design <code>classify(value)</code> returning "missing"/"flag"/"count"/"measurement"/"id-or-text" for arbitrary values — handling bool-before-int, None-first, and numeric strings. Justify each branch order.</li></ol></div>
+<h3>4.9 Mini-challenge 🏆</h3>
+<div class="ex L2"><span class="pill">Challenge</span><p><strong>Build <code>type_lab.py</code>.</strong> Given a hardcoded list of 20 tricky values (<code>0, "0", 0.0, "", [], [0], None, float("nan"), True, "True", {}, {"a":0}, (), (0,), set(), range(0), 10**100, 0.1+0.2, Decimal("0.3")</code>): print a table of value → <code>type</code> → <code>bool</code> → mutable? → "== 0?" → "is None?". Predict the full table <em>before</em> running. Every wrong prediction is a gap this chapter just closed — note each and why.</p></div>
+<div class="callout good"><strong class="t">🏁 Chapter summary → next</strong><strong>Remember:</strong> int = exact, unbounded · float = binary approximation (<code>isclose</code>, never <code>==</code>; never money) · bool ⊂ int (count with <code>sum</code>; bool-checks before int-checks) · <code>None</code> tested with <code>is</code> · <code>{}</code>≠set, <code>(5)</code>≠tuple · dict/set/tuple/list chosen by labels/uniqueness/fixity/order. <strong>Next:</strong> Chapter 5 — operators combine these types: seven families, precedence, short-circuiting, and the traps (<code>==</code> vs <code>is</code>, mutating <code>+=</code>, chained comparisons).</div>
+</div></section>

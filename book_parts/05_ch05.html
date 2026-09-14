@@ -1,0 +1,195 @@
+<!-- CHAPTER 5 -->
+<section class="chapter" id="ch05">
+<div class="ch-head"><div class="ch-num">5</div><div><div class="kicker">Core data</div><h2>Operators</h2></div><div class="ch-tools"><button class="icon-btn bm" title="Bookmark">☆</button><button class="icon-btn done" title="Mark complete">✓</button><span class="chev">▾</span></div></div>
+<div class="ch-body">
+<p><strong>What/why.</strong> Operators are the <em>verbs</em> of code: compact symbols that <em>do things</em> to values (<code>+ - * / // % ** == != &lt; and or not in is &amp; |</code>). Python groups them into seven families. The professional skill is not memorizing symbols — it is mastering <strong>precedence</strong> (which operator grabs its operands first), <strong>short-circuit evaluation</strong> (which work gets skipped, and why that's a feature), <strong>chaining</strong> (Python's elegant <code>a &lt; x &lt; b</code>), and the <strong>four classic traps</strong>: <code>==</code> vs <code>is</code>, mutating <code>+=</code>, floor-division with negatives, and <code>or</code>-defaults swallowing valid zeros.</p>
+
+<h3>5.1 The seven families (complete map)</h3>
+<table><tr><th>Family</th><th>Operators</th><th>Example → result</th><th>Returns</th></tr>
+<tr><td><strong>Arithmetic</strong></td><td><code>+ - * / // % **</code> (+ unary <code>-x</code>, <code>+x</code>)</td><td><code>7/2→3.5</code>, <code>7//2→3</code>, <code>7%2→1</code>, <code>2**10→1024</code></td><td>Number (or defined by <code>__add__</code>…)</td></tr>
+<tr><td><strong>Comparison</strong></td><td><code>== != &lt; &lt;= &gt; &gt;=</code></td><td><code>3 &lt; 5 → True</code>; chains: <code>1 &lt; x &lt; 10</code></td><td><code>bool</code> (usually)</td></tr>
+<tr><td><strong>Logical</strong></td><td><code>and or not</code></td><td><code>True and 0 → 0</code> (operands, not bools!)</td><td>An <em>operand</em> (§5.3)</td></tr>
+<tr><td><strong>Assignment</strong></td><td><code>= += -= *= /= //= %= **= &amp;= |=</code>, walrus <code>:=</code></td><td><code>x += 2</code>; <code>if (n := len(d)) &gt; 3:</code></td><td>Statement (walrus: the value)</td></tr>
+<tr><td><strong>Identity</strong></td><td><code>is, is not</code></td><td><code>x is None → True/False</code></td><td><code>bool</code></td></tr>
+<tr><td><strong>Membership</strong></td><td><code>in, not in</code></td><td><code>"a" in "cat" → True</code>; <code>"k" in {"k":1}</code> (keys!)</td><td><code>bool</code></td></tr>
+<tr><td><strong>Bitwise</strong></td><td><code>&amp; | ^ ~ &lt;&lt; &gt;&gt;</code></td><td><code>0b1100 &amp; 0b1010 → 0b1000 (8)</code></td><td>Int (bits transformed)</td></tr></table>
+<p><strong>Why so many?</strong> Each family answers a different <em>question kind</em>: arithmetic <em>computes</em>, comparison <em>judges</em>, logical <em>combines judgments</em>, assignment <em>stores</em>, identity <em>identifies</em>, membership <em>searches</em>, bitwise <em>packs flags into integers</em>. Confusing families (<code>&amp;</code> for <code>and</code>, <code>is</code> for <code>==</code>) is a rite of passage — this chapter vaccinates you.</p>
+<p><strong>Analogy.</strong> Operators are <em>sentence verbs and conjunctions</em>: arithmetic verbs transform nouns (<code>total + tax</code>), comparisons ask yes/no questions (<code>age &gt;= 18?</code>), logical operators build compound questions ("adult <em>and</em> member?"), and assignment files the answer (<code>status = …</code>). Precedence is <em>punctuation</em> — it decides which words group together before you read the sentence.</p>
+
+<h3>5.2 Arithmetic, deeply: the division trio, modulo, and power</h3>
+<p><strong>What — three divisions, three meanings:</strong> <code>/</code> is <em>true division</em> (always <code>float</code>: <code>7/2 → 3.5</code>, even <code>4/2 → 2.0</code>); <code>//</code> is <em>floor division</em> (quotient rounded <em>down toward −∞</em>: <code>7//2 → 3</code>); <code>%</code> is <em>modulo</em> (remainder with the <em>divisor's sign</em>). They obey one inviolable law: <code>a == (a // b) * b + (a % b)</code> — always, including negatives.</p>
+<div class="code-block"><div class="code-head">division trio + the negative surprise, explained <button class="copy-btn">Copy</button></div><pre><code>print(7 / 2)     # 3.5 — true division, ALWAYS float
+print(7 // 2)    # 3 — floor(3.5) = 3
+print(7 % 2)     # 1 — remainder; 7 == 3*2 + 1 ✓
+print(divmod(7, 2))   # (3, 1) — quotient AND remainder, one call
+print(-7 // 2)   # -4 — NOT -3! floor(-3.5) = -4 (toward -infinity)
+print(-7 % 2)    # 1 — sign follows the DIVISOR: -7 == (-4)*2 + 1 ✓
+print(7 % -2)    # -1 — divisor negative → remainder negative
+print(2 ** 10, 2 ** 0.5, 9 ** 0.5)  # 1024 1.414... 3.0 — ** does roots too</code></pre><div class="out">3.5
+3
+1
+(3, 1)
+-4
+1
+-1
+1024 1.4142135623730951 3.0</div></div>
+<p><strong>Step-by-step (<code>-7 // 2 == -4</code>).</strong> True quotient: −3.5. <code>//</code> floors <em>toward negative infinity</em>: the integers around −3.5 are −4 and −3; the lower is −4. Then <code>%</code> is <em>defined</em> by the law: <code>-7 == (-4)*2 + r</code> → <code>r = 1</code>. C/Java truncate toward zero instead (<code>-7/2 → -3</code>) — Python's choice makes modulo <em>mathematically clean</em> for wraparound (clock arithmetic, circular buffers, array rotation: <code>items[i % len(items)]</code> works even for negative <code>i</code> — try that in C!).</p>
+<p><strong>Multiple examples — modulo's greatest hits:</strong></p>
+<div class="code-block"><div class="code-head">modulo patterns you'll reuse forever <button class="copy-btn">Copy</button></div><pre><code># Even/odd, every-Nth, wraparound, last digit
+print([n % 2 == 0 for n in range(5)])   # [True, False, True, False, True]
+days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+print(days[10 % 7])    # Thu — wraparound indexing (10 % 7 = 3 → days[3])
+print(12345 % 10)      # 5 — last digit
+print(divmod(125, 60)) # (2, 5) — 125 min = 2h 05min (time math!)
+# Power quirks: right-associativity + unary minus
+print(2 ** 3 ** 2)     # 512 — parsed as 2**(3**2), NOT (2**3)**2=64
+print(-3 ** 2)         # -9 — ** binds TIGHTER than unary minus: -(3**2)
+print((-3) ** 2)       # 9 — parens force intent</code></pre><div class="out">[True, False, True, False, True]
+Thu
+5
+(2, 5)
+512
+-9
+9</div></div>
+<div class="callout warn"><strong class="t">⚠️ Common mistakes</strong><code>-3 ** 2</code> → <code>-9</code> (bind order!); <code>2 ** 3 ** 2</code> → 512 (right-assoc); <code>10 % 3.5</code> works on floats (→ 3.0) but inherits float dust; <code>%</code> by zero → <code>ZeroDivisionError</code> (same as <code>/</code>); huge <code>**</code> (e.g. <code>10 ** 10**8</code>) hangs allocating gigadigits — use modular <code>pow(a, b, mod)</code> for crypto-scale work.</div>
+
+<h3>5.3 Precedence: the silent decider (with proof-by-example)</h3>
+<p><strong>What.</strong> <em>Precedence</em> ranks operators: higher-precedence operators grab their operands <em>first</em>, as if parenthesized. <em>Associativity</em> breaks ties: left-assoc (<code>a - b - c = (a-b)-c</code>) vs right-assoc (<code>**</code>). Python's order (highest → lowest), with only the rows that actually bite:</p>
+<table><tr><th>Rank</th><th>Operators</th><th>Notes</th></tr>
+<tr><td>1 (highest)</td><td><code>**</code></td><td>Right-associative; binds tighter than unary <code>-</code> on its right</td></tr>
+<tr><td>2</td><td>unary <code>+x, -x, ~x</code></td><td></td></tr>
+<tr><td>3</td><td><code>* / // %</code></td><td>Left-assoc</td></tr>
+<tr><td>4</td><td><code>+ -</code></td><td>Left-assoc</td></tr>
+<tr><td>5</td><td><code>&lt;&lt; &gt;&gt;</code>, then <code>&amp;</code>, then <code>^</code>, then <code>|</code></td><td>Bitwise sits <em>between</em> arithmetic and comparisons — the Pandas trap (§5.6)!</td></tr>
+<tr><td>6</td><td>comparisons: <code>== != &lt; &lt;= &gt; &gt;= is in</code></td><td>All <em>equal rank + chainable</em> (§5.4)</td></tr>
+<tr><td>7</td><td><code>not</code></td><td></td></tr>
+<tr><td>8</td><td><code>and</code></td><td>Tighter than <code>or</code></td></tr>
+<tr><td>9 (lowest)</td><td><code>or</code>, then walrus <code>:=</code></td><td>Walrus needs parens in most expressions</td></tr></table>
+<div class="code-block"><div class="code-head">precedence traps, each annotated <button class="copy-btn">Copy</button></div><pre><code>print(2 + 3 * 4)              # 14 — * first (school rules survive)
+print(10 - 2 ** 3)            # 2 — ** before -: 10-8
+print(not 1 == 2)             # True — parsed as not (1==2), NOT (not 1)==2
+print(False or True and False)      # False — and binds tighter: False or (True and False)
+print(True or True and False)       # True — same grouping: True or (…)
+print((False or True) and False)    # False — parens OVERRIDE (always parenthesize!)</code></pre><div class="out">14
+2
+True
+False
+True
+False</div></div>
+<p><strong>Best practice (unambiguous).</strong> Memorize only: <em>arithmetic before comparison before <code>not</code> before <code>and</code> before <code>or</code></em> — and <strong>parenthesize everything else</strong>. Parens cost nothing, prevent all precedence bugs, and document intent. Code review rule: if a reader must recall the table, the code needs parens.</p>
+
+<h3>5.4 Comparison chaining: Python's elegant superpower</h3>
+<p><strong>What.</strong> Consecutive comparisons <em>chain</em>: <code>a &lt; b &lt; c</code> means <code>(a &lt; b) and (b &lt; c)</code> — with <code>b</code> <strong>evaluated only once</strong>. Chains can mix operators (<code>1 &lt;= x &lt; 10 != y</code>) and stretch arbitrarily long. Each link must hold for the whole to be True; evaluation <em>short-circuits</em> (stops at the first False link).</p>
+<div class="code-block"><div class="code-head">chaining: beauty + one surprise <button class="copy-btn">Copy</button></div><pre><code>age = 25
+print(18 &lt;= age &lt; 65)        # True — "working age" in one breath
+print(18 &lt;= age &lt; 20)        # False — second link fails
+# Single evaluation proof: b computed ONCE
+calls = []
+def tracked(v):
+    calls.append(v)
+    return v
+print(0 &lt; tracked(5) &lt; 10, "| calls:", calls)  # True | calls: [5] — once!
+# ⚠️ Surprise: == chains too!
+a, b, c = 1, 1, 2
+print(a == b == c)   # False — means (a==b) and (b==c): True and False
+print((a == b) == c) # False too — but means (True)==2 → False (different!)</code></pre><div class="out">True
+False
+True | calls: [5]
+False
+False</div></div>
+<p><strong>Why single-evaluation matters.</strong> <code>low() &lt; expensive(x) &lt; high()</code> calls <code>expensive</code> once — both faster <em>and</em> correct if the function has side effects or returns different values per call (timestamps, random draws, consumed iterators). The naive expansion <code>e &gt; low() and e &lt; high()</code> with <code>e = expensive(x)</code> matches it — but the chain is shorter and can't drift out of sync.</p>
+<div class="callout warn"><strong class="t">⚠️ Common mistake: chained == isn't "all equal to the first"</strong><code>a == b == c</code> checks <em>adjacent pairs</em> — fine for equality (transitive), but <code>a &lt; b == c</code> means <code>(a&lt;b) and (b==c)</code>, which surprises readers expecting grouping. Mixed chains are legal but often unclear — parenthesize or split when mixing operators.</div>
+
+<h3>5.5 Logical operators: short-circuiting operand-returners</h3>
+<p><strong>What.</strong> <code>and</code>/<code>or</code> evaluate operands left to right and <strong>stop at the first value that decides the outcome</strong> (<em>short-circuiting</em>), <strong>returning that operand itself</strong> — not necessarily a boolean. Rules: <code>or</code> returns the first <em>truthy</em> operand (or the last operand if none); <code>and</code> returns the first <em>falsy</em> operand (or the last operand if none). <code>not x</code> always returns a real <code>bool</code> (<code>True</code> iff <code>x</code> is falsy).</p>
+<p><strong>Why this design.</strong> Two wins: (1) <em>efficiency + safety</em> — skipped operands never execute, so guards like <code>if items and items[0] == x:</code> can't IndexError (if <code>items</code> is empty/falsy, <code>items[0]</code> never runs); (2) <em>idioms</em> — <code>name or "guest"</code> (defaults), <code>cond and value</code> (conditional values) fall out naturally.</p>
+<div class="code-block"><div class="code-head">short-circuit: proofs + idioms + the trap <button class="copy-btn">Copy</button></div><pre><code># Proof 1: skipped work never runs (no crash!)
+print(False and 1/0)   # False — 1/0 NEVER evaluated
+print(True or 1/0)     # True — 1/0 NEVER evaluated
+# Proof 2: operands returned, not bools
+print("" or "guest")       # 'guest' — first truthy
+print("ali" or "guest")    # 'ali' — first truthy (second skipped)
+print("a" and "b" and "")  # '' — first falsy
+print("a" and "b" and "c") # 'c' — all truthy → last
+print(not 0, not "hi")     # True False — not ALWAYS makes bool
+# The idiom...
+print(0 or 5)              # 5
+# ...and its TRAP: 0/"" /[] may be VALID values!
+qty = 0
+print(qty or 10)                       # 10 — WRONG if 0 means "none ordered"
+print(qty if qty is not None else 10)  # 0 — correct: only None triggers default</code></pre><div class="out">False
+True
+guest
+ali
+
+c
+True False
+5
+10
+0</div></div>
+<p><strong>Step-by-step (<code>"a" and "b" and ""</code>).</strong> <code>and</code> scans: <code>"a"</code> truthy → continue; <code>"b"</code> truthy → continue; <code>""</code> falsy → <strong>stop, return <code>""</code></strong>. Nothing after it would run. This left-to-right-with-early-exit walk is also exactly how chained comparisons (§5.4) and <code>any()/all()</code> (Chapter 20) behave — one mental model, three constructs.</p>
+<div class="callout warn"><strong class="t">⚠️ The eternal beginner bug</strong><code>if answer == "y" or "yes":</code> is <strong>always True</strong> — it parses as <code>(answer == "y") or ("yes")</code>, and the non-empty string <code>"yes"</code> is truthy. Correct: <code>if answer in ("y", "yes"):</code> — membership (§5.6) is the multi-option test.</div>
+
+<h3>5.6 Identity, membership, and bitwise (each with its real job)</h3>
+<p><strong>Identity (<code>is</code>).</strong> Same-object test (§3.2). Correct uses: <code>x is None</code>, <code>flag is True</code> (rare — <code>if flag:</code> suffices), sentinel checks. Never for values. <code>is not</code> is its negation (<code>if row is not None:</code>).</p>
+<p><strong>Membership (<code>in</code>).</strong> Searches containers — with <em>wildly different costs</em>: <code>list/tuple/str</code> scan element-by-element — O(n); <code>set/dict</code> hash directly — O(1) average. For <code>dict</code>, <code>in</code> tests <strong>keys only</strong> (<code>"a" in {"a": 1}</code> → True; <code>1 in {"a": 1}</code> → False). For strings, tests <strong>substrings</strong> (<code>"cat" in "concatenate"</code> → True).</p>
+<div class="code-block"><div class="code-head">membership semantics + the set speedup <button class="copy-btn">Copy</button></div><pre><code>print("a" in "cat", "z" not in "cat")   # True True — substring test
+print("k" in {"k": 1}, 1 in {"k": 1})    # True False — KEYS only!
+print(2 in [1, 2, 3], 9 in {1, 2, 3})    # True False
+# The 1000× pattern (Chapter 24 proves it): hash once, lookup O(1)
+import time
+big_list = list(range(200_000))
+big_set = set(big_list)
+t0 = time.perf_counter(); _ = 199_999 in big_list; t_list = time.perf_counter() - t0
+t0 = time.perf_counter(); _ = 199_999 in big_set; t_set = time.perf_counter() - t0
+print(f"list: {t_list*1000:.2f}ms  set: {t_set*1000:.4f}ms")</code></pre><div class="out">True True
+True False
+True False
+list: 2.10ms  set: 0.0008ms</div></div>
+<p><strong>Bitwise (<code>&amp; | ^ ~ &lt;&lt; &gt;&gt;</code>).</strong> Operate on the <em>binary digits</em> of ints. Real jobs: (1) <strong>flag packing</strong> — many booleans in one int (<code>READ=4, WRITE=2, EXEC=1; perm = READ | WRITE</code>; test with <code>perm &amp; WRITE</code>); (2) <strong>masks</strong> (<code>value &amp; 0xFF</code> keeps the low byte); (3) <strong>shifts</strong> (<code>x &lt;&lt; 3</code> = ×8, <code>x &gt;&gt; 1</code> = ÷2 floored). In Pandas/NumPy, <code>&amp;</code>/<code>|</code> combine boolean masks <em>elementwise</em> — and since bitwise binds <em>tighter than comparisons</em> (§5.3), you must parenthesize: <code>(df.a &gt; 0) &amp; (df.b &lt; 5)</code>. Forgetting the parens is the most common Pandas <code>TypeError</code>/<code>ValueError</code> in existence.</p>
+<div class="code-block"><div class="code-head">bitwise, bit by bit <button class="copy-btn">Copy</button></div><pre><code>a, b = 0b1100, 0b1010   # 12, 10
+print(bin(a &amp; b))  # 0b1000 (8) — 1 where BOTH have 1
+print(bin(a | b))  # 0b1110 (14) — 1 where EITHER has 1
+print(bin(a ^ b))  # 0b110 (6) — 1 where they DIFFER
+print(bin(a &lt;&lt; 2)) # 0b110000 (48) — shift left = ×4
+# Flags in action:
+READ, WRITE, EXEC = 4, 2, 1
+perm = READ | WRITE            # 6 — grant read+write
+print(perm, bool(perm &amp; EXEC))  # 6 False — exec bit not set
+perm |= EXEC                   # grant exec → 7
+perm &= ~WRITE                 # revoke write → 5
+print(perm)</code></pre><div class="out">0b1000
+0b1110
+0b110
+0b110000
+6 False
+5</div></div>
+
+<h3>5.7 Assignment family + walrus, deeply</h3>
+<p><strong>Augmented assignment</strong> (<code>+= -= *= …</code>) rebinds <code>x = x OP value</code> — <em>except</em> mutables implement in-place versions: <code>list += …</code> extends <strong>in place</strong> (aliases see it), while <code>lst = lst + …</code> builds new (aliases don't) — §3.7's proof. <strong>Walrus</strong> (<code>:=</code>, 3.8+) assigns <em>inside an expression</em> and evaluates to the assigned value — for "compute once, test, and keep":</p>
+<div class="code-block"><div class="code-head">walrus: compute-test-keep <button class="copy-btn">Copy</button></div><pre><code>data = [1, 2, 3, 4]
+if (n := len(data)) &gt; 3:     # assign n AND test it — one pass
+    print("many:", n)         # n survives after the if! → many: 4
+# Without walrus: len(data) twice, or a temp line before the if.
+# Loop idiom: read until sentinel
+lines = iter(["a", "b", "STOP", "c"])
+while (line := next(lines)) != "STOP":
+    print("got:", line)       # got: a / got: b — then stops, "c" never read</code></pre><div class="out">many: 4
+got: a
+got: b</div></div>
+<div class="callout warn"><strong class="t">⚠️ Walrus restraint</strong>The walrus binds in the <em>surrounding scope</em> (even inside comprehensions/if-conditions — it leaks by design). Use it for exactly this pattern (use-twice value in a test); nested walruses and walrus-in-comprehension heroics are write-only code. When in doubt, write the extra line.</div>
+
+<h3>5.8 Interview questions</h3>
+<details><summary>Q1: Explain // with negatives: why is -7 // 2 == -4 and -7 % 2 == 1?</summary><div class="inner"><code>//</code> floors toward −∞: −7/2 = −3.5 → −4. <code>%</code> is defined by the invariant <code>a == (a//b)*b + (a%b)</code>: −7 == (−4)(2) + 1. The divisor's sign determines the remainder's sign. Benefit: wraparound indexing and clock arithmetic work uniformly for negatives.</div></details>
+<details><summary>Q2: What does `or` return, exactly? When is `x or default` wrong, and what's the fix?</summary><div class="inner"><code>or</code> returns the first truthy operand, else the last — an operand, not a bool. <code>x or default</code> wrongly replaces valid-but-falsy <code>0/"" /[]</code>. Fix when only None means missing: <code>x if x is not None else default</code>.</div></details>
+<details><summary>Q3: `a += b` vs `a = a + b` — when do they differ?</summary><div class="inner">For immutables they're equivalent (both rebind to a new object). For mutables with in-place methods (list <code>__iadd__</code>), <code>+=</code> mutates in place — aliases observe it; <code>= … + …</code> builds new and rebinds only that name. Prove with <code>id()</code> + an alias witness.</div></details>
+<details><summary>Q4: Why do Pandas filters need parens: `(df.a &gt; 0) &amp; (df.b &lt; 5)`?</summary><div class="inner"><code>&amp;</code> (bitwise) binds tighter than comparisons, so <code>df.a &gt; 0 &amp; df.b &lt; 5</code> parses as <code>df.a &gt; (0 &amp; df.b) &lt; 5</code> — garbage. Parens force the comparisons first; <code>&amp;</code> then combines the boolean masks elementwise. (Also: must use <code>&amp;</code>, not <code>and</code> — <code>and</code> can't elementwise-combine and tries truthiness of the whole Series.)</div></details>
+
+<h3>5.9 Exercises</h3>
+<div class="ex L1"><span class="pill">Level 1 · Understand</span><ol><li>Predict then verify (show grouping): <code>10 + 2 * 3 ** 2</code>, <code>not 0 == 1</code>, <code>1 &lt; 2 == 2 &lt; 3</code>, <code>-2 ** 2</code>, <code>5 - 2 - 1</code>.</li><li>Prove the <code>//</code>/<code>%</code> invariant holds for 6 sign combinations of <code>(±7, ±2)</code>. State the sign rule for <code>%</code> in one sentence.</li><li>Show <code>a += [1]</code> vs <code>a = a + [1]</code> differing under an alias <code>b = a</code>, with <code>id()</code> evidence.</li></ol></div>
+<div class="ex L2"><span class="pill">Level 2 · Apply</span><ol><li><code>paginate(total, per_page)</code> via <code>divmod</code> (no floats, validate inputs). Extend: <code>page_of(index, per_page)</code> and <code>offset(page, per_page)</code>.</li><li>Benchmark <code>x in big_list</code> vs <code>x in big_set</code> at n = 10k/100k/500k; plot or tabulate time-vs-n and identify O(n) vs O(1) by shape.</li><li>Implement flag grant/revoke/check with <code>| &amp; ~</code>; add <code>has_all(perm, *flags)</code> and <code>has_any</code>. Explain each bit operation in comments.</li></ol></div>
+<div class="ex L3"><span class="pill">Level 3 · Interview</span><ol><li>Find the bug and fix three ways: <code>def greet(name): name = name or "guest"; return "hi " + name</code> — when is it wrong? (Consider <code>""</code> vs <code>None</code>.) Discuss which fix fits which API contract.</li><li>Explain chained-comparison single evaluation with a side-effect proof (like §5.4's tracker), then argue where you'd still prefer an explicit temp variable for readability.</li></ol></div>
+<h3>5.10 Mini-challenge 🏆</h3>
+<div class="ex L2"><span class="pill">Challenge</span><p><strong>Build <code>precedence_prover.py</code>.</strong> A script that prints a table of 12 tricky expressions (§5.3's six plus six of your invention), each with: the expression, its value, and its <em>explicitly parenthesized equivalent</em> (which you assert equals the original with <code>==</code>). If any assertion fails, your mental grouping was wrong — the script grades your precedence intuition automatically.</p></div>
+<div class="callout good"><strong class="t">🏁 Chapter summary → next</strong><strong>Remember:</strong> 7 families for 7 question-kinds · <code>/</code> always float; <code>//</code> floors (−7//2=−4); <code>%</code> sign follows divisor; the invariant always holds · precedence: arithmetic → comparison → not → and → or (parenthesize the rest!) · chains evaluate middles once · <code>and/or</code> short-circuit and return operands (<code>or</code>-defaults eat valid zeros — use <code>is not None</code>) · <code>in</code> is O(1) on sets/dicts, keys-only on dicts · bitwise needs parens around Pandas comparisons. <strong>Next:</strong> Chapter 6 — strings at full depth: the immutable text workhorse — slicing, methods, f-strings, Unicode, and real text cleaning.</div>
+</div></section>
