@@ -1,0 +1,23 @@
+# Phase 15 - Days 259-268 : Deployment + MLOps + Data Engineering
+DAYS = [
+    (259, "Streamlit: Build and Deploy Data Apps", "Streamlit execution model|Widgets, layout and state|Caching with st.cache_data|Secrets management|Deploying to Streamlit Cloud and Hugging Face Spaces",
+     "189,190,191,192,193,194,195,196,198", "13_streamlit/01_app_test/app.py;13_streamlit/03_ml_app/app.py;13_streamlit/06_Streamlit_secrets_APIs/main.py", 3, "src"),
+    (260, "Flask and REST Fundamentals", "WSGI and the request-response cycle|Routes, templates and static files|Form handling and JSON APIs|Model serving endpoint pattern|Deploying Flask on a VM",
+     "200,201,202,203,204,205,206,207,208,209,210", "15_flask_web_apps/00_Complete_tutorials/04_House-Price-Predictor/app.py;15_flask_web_apps/00_Complete_tutorials/06_diabetese_prediction/main.py", 3, "src"),
+    (261, "FastAPI and Pydantic", "ASGI vs WSGI|Path, query and body parameters|Pydantic models and validation|Automatic Swagger/OpenAPI docs|Async endpoints and background tasks",
+     "211,212,213,214,215,216,217,218,219", "13_streamlit/19_chat_with_docs_using_ppl_api/app.py;15_flask_web_apps/03_image_generation/app.py", 3, "src"),
+    (262, "Docker: Images, Containers and Dockerfiles", "Containers vs virtual machines|Dockerfile instructions|Building, tagging and running images|Volumes, ports and environment variables|Slimming images with multi-stage builds",
+     "262", "13_streamlit/04_word_cloud_app/requirements.txt;15_flask_web_apps/00_Complete_tutorials/01_basic_app/requirements.txt", 3, "ext"),
+    (263, "Docker Compose, Registries and Deployment", "Multi-service apps with Compose|Networking and service discovery|Pushing to a registry|Deploying a container to the cloud|Debugging containers in production",
+     "263", "13_streamlit/03_ml_app", 3, "ext"),
+    (264, "MLflow: Experiment Tracking", "Reproducibility problem in ML|MLflow tracking server and runs|Logging params, metrics, artefacts and models|Comparing runs in the UI|Autologging for sklearn, PyTorch and XGBoost",
+     "264", "07_machine_learning/21_best_model_selection.ipynb", 3, "ext"),
+    (265, "MLflow Registry, Testing and CI/CD", "MLOps: model registry stages and versions|Managing model lifecycle|Unit and integration tests for ML code|GitHub Actions CI pipeline|CD: build, test, publish, deploy",
+     "265", "07_machine_learning/saved_models;00_projects/best_model_selection", 3, "ext"),
+    (266, "Monitoring, Logging, Data Drift and Model Drift", "MLOps monitoring: system, data, model, business|Data drift detection (PSI, KS, KL)|Concept drift and delayed labels|Alerting and retraining triggers|Shadow deployment and canary releases",
+     "266", "07_machine_learning/23_hyperparamterr_tunning_and_best_model_selection.ipynb", 3, "ext"),
+    (267, "PySpark and Distributed Data Processing", "When pandas stops scaling|Spark architecture: driver, executors, cluster|DataFrames, lazy evaluation, actions|Transformations, joins, aggregations at scale|Spark ML and pipelines",
+     "267", "resources/datasets_for_practice/World_Census_Agriculture_E_All_Data.csv", 3, "ext"),
+    (268, "Cloud and Production ML System Design", "Cloud mental model: compute, storage, network|AWS, GCP and Azure service mapping|Batch vs online vs streaming inference|Feature stores and data contracts|Designing an ML system: requirements to deployment",
+     "210,268", "13_streamlit/03_ml_app", 3, "ext"),
+]

@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Deep Data Science & AI Academy - a 275-day, source-traceable, interactive learning platform from Python foundations to production GenAI.">
+<title>Deep Data Science &amp; AI Academy - 275 days</title>
+<link rel="stylesheet" href="assets/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#128202;</text></svg>">
+</head>
+<body>
+<div id="app" class="app">
+
+  <!-- ============ SIDEBAR ============ -->
+  <aside id="sidebar" class="sidebar" aria-label="Course navigation">
+    <div class="brand">
+      <div class="brand-mark">DS</div>
+      <div class="brand-text">
+        <strong>Deep Data Science &amp; AI Academy</strong>
+        <span id="brandSub">275 days &middot; 16 phases</span>
+      </div>
+      <button id="closeSidebar" class="icon-btn only-mobile" aria-label="Close navigation">&times;</button>
+    </div>
+
+    <div class="side-actions">
+      <div class="progress-wrap" title="Lessons completed">
+        <div class="progress-bar"><span id="progressFill"></span></div>
+        <small id="progressLabel">0 / 275 days</small>
+      </div>
+      <div class="mode-grid" role="group" aria-label="Learning modes">
+        <button class="mode-btn" data-mode="beginner" title="Simplified explanations">Beginner</button>
+        <button class="mode-btn" data-mode="deep" title="Full technical depth">Deep</button>
+        <button class="mode-btn" data-mode="code" title="Jump to code and exercises">Code</button>
+        <button class="mode-btn" data-mode="interview" title="Interview drilling">Interview</button>
+        <button class="mode-btn" data-mode="project" title="Project framing">Project</button>
+        <button class="mode-btn" data-mode="revision" title="Fast revision of key points">Revision</button>
+      </div>
+      <div class="jump">
+        <label for="dayJump" class="sr-only">Jump to day</label>
+        <input id="dayJump" type="number" min="1" max="275" placeholder="Go to day 1-275">
+        <button id="dayGo" class="primary-btn">Go</button>
+      </div>
+    </div>
+
+    <nav id="phaseNav" class="phase-nav"></nav>
+
+    <div class="side-footer">
+      <button id="openTutorSide" class="ghost-btn">AI Tutor</button>
+      <button id="openHelp" class="ghost-btn">Shortcuts</button>
+      <button id="toggleTheme" class="ghost-btn">Theme</button>
+    </div>
+  </aside>
+
+  <!-- ============ MAIN ============ -->
+  <main class="main">
+    <header class="topbar">
+      <button id="openSidebar" class="icon-btn only-mobile" aria-label="Open navigation">&#9776;</button>
+      <div class="search-wrap">
+        <input id="search" type="search" placeholder="Search 275 days: sql joins, attention, drift, docker..." autocomplete="off" aria-label="Search lessons">
+        <div id="searchResults" class="search-results" hidden></div>
+      </div>
+      <div class="topbar-actions">
+        <button id="btnPrev" class="ghost-btn" title="Previous day">&larr; Prev</button>
+        <span id="dayCounter" class="day-counter">Day 1 / 275</span>
+        <button id="btnNext" class="ghost-btn" title="Next day">Next &rarr;</button>
+        <button id="btnTutor" class="primary-btn" title="Ask the AI Tutor">AI Tutor</button>
+      </div>
+    </header>
+
+    <div id="lesson" class="lesson" aria-live="polite">
+      <div class="loading">
+        <div class="spinner"></div>
+        <p>Loading Day 1...</p>
+      </div>
+    </div>
+
+    <footer class="lesson-footer">
+      <button id="btnDone" class="primary-btn">Mark day complete</button>
+      <button id="btnBookmark" class="ghost-btn">Bookmark</button>
+      <button id="btnNotes" class="ghost-btn">My notes</button>
+      <button id="btnPrint" class="ghost-btn">Print / PDF</button>
+    </footer>
+  </main>
+
+  <!-- ============ TUTOR PANEL ============ -->
+  <aside id="tutor" class="tutor" aria-label="AI Tutor" hidden>
+    <header class="tutor-head">
+      <div>
+        <strong>AI Tutor</strong>
+        <small id="tutorContext">Day 1 &middot; What is Data Science?</small>
+      </div>
+      <button id="closeTutor" class="icon-btn" aria-label="Close tutor">&times;</button>
+    </header>
+    <div id="tutorLog" class="tutor-log"></div>
+    <div class="tutor-quick" id="tutorQuick">
+      <button data-intent="simple">Explain this simply</button>
+      <button data-intent="technical">Explain this technically</button>
+      <button data-intent="example">Give me an example</button>
+      <button data-intent="coding">Give me a coding problem</button>
+      <button data-intent="quiz">Quiz me</button>
+      <button data-intent="interview">Interview me</button>
+      <button data-intent="whywrong">Why is my code wrong?</button>
+      <button data-intent="beginner">Explain like I'm a beginner</button>
+      <button data-intent="realworld">Give me a real-world example</button>
+      <button data-intent="production">How is this used in production?</button>
+    </div>
+    <form id="tutorForm" class="tutor-form">
+      <input id="tutorInput" placeholder="Ask anything about this lesson..." autocomplete="off">
+      <button class="primary-btn" type="submit">Send</button>
+    </form>
+    <div class="tutor-note" id="tutorNote">
+      Offline tutor: answers are composed from this lesson's own materials. Add an API key in
+      <button id="openSettings" class="link-btn">settings</button> to connect a live model.
+    </div>
+  </aside>
+
+  <!-- ============ NOTES / SETTINGS MODALS ============ -->
+  <div id="notesModal" class="modal" hidden>
+    <div class="modal-box">
+      <header><strong>My notes</strong><button class="icon-btn" data-close-modal>&times;</button></header>
+      <textarea id="notesArea" placeholder="Write your own explanation of today's lesson. If you can write it, you understand it."></textarea>
+      <footer><small id="notesMeta"></small><button id="saveNotes" class="primary-btn">Save notes</button></footer>
+    </div>
+  </div>
+
+  <div id="settingsModal" class="modal" hidden>
+    <div class="modal-box">
+      <header><strong>AI Tutor settings</strong><button class="icon-btn" data-close-modal>&times;</button></header>
+      <p class="muted">The tutor works fully offline. Optionally connect a live model (OpenAI-compatible
+        endpoint). Your key is stored only in this browser's localStorage and is sent directly from your
+        browser to the endpoint you choose - never to this app's server.</p>
+      <label>Endpoint URL<input id="setEndpoint" placeholder="https://api.openai.com/v1/chat/completions"></label>
+      <label>Model<input id="setModel" placeholder="gpt-4o-mini"></label>
+      <label>API key<input id="setKey" type="password" placeholder="sk-..."></label>
+      <footer><button id="saveSettings" class="primary-btn">Save</button><button id="clearSettings" class="ghost-btn">Clear</button></footer>
+    </div>
+  </div>
+
+  <div id="helpModal" class="modal" hidden>
+    <div class="modal-box">
+      <header><strong>Keyboard shortcuts</strong><button class="icon-btn" data-close-modal>&times;</button></header>
+      <ul class="shortcuts">
+        <li><kbd>j</kbd> / <kbd>k</kbd> next / previous day</li>
+        <li><kbd>/</kbd> focus search</li>
+        <li><kbd>t</kbd> toggle AI Tutor</li>
+        <li><kbd>n</kbd> open notes</li>
+        <li><kbd>m</kbd> mark day complete</li>
+        <li><kbd>1</kbd>..<kbd>6</kbd> switch learning mode</li>
+        <li><kbd>g</kbd> then a number + Enter jumps to that day</li>
+        <li><kbd>Esc</kbd> close panels</li>
+      </ul>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" hidden></div>
+</div>
+
+<script src="assets/visuals.js"></script>
+<script src="assets/app.js"></script>
+<script src="assets/tutor.js"></script>
+</body>
+</html>

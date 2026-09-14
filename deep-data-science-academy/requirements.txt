@@ -1,0 +1,59 @@
+# The academy application itself has ZERO third-party dependencies.
+# It runs on the Python standard library alone (http.server + json + pathlib),
+# which is what keeps it deployable on free tiers and Hugging Face Spaces.
+#
+# Learner environment: install these to RUN the lesson code (not to run app.py).
+#   python -m pip install -r requirements.txt
+#
+# Phase 1-7 (Python, NumPy, pandas, visualisation, maths, statistics)
+numpy>=2.0
+pandas>=2.2
+matplotlib>=3.8
+seaborn>=0.13
+scipy>=1.13
+statsmodels>=0.14
+plotly>=5.22
+scikit-learn>=1.5
+jupyterlab>=4.2
+ydata-profiling>=4.9
+# Phase 8 (SQL)
+SQLAlchemy>=2.0
+duckdb>=1.1
+# Phase 9-10 (BI, boosting libraries)
+xgboost>=2.1
+lightgbm>=4.5
+catboost>=1.2
+shap>=0.46
+imbalanced-learn>=0.12
+# Phase 11 (time series + dimensionality reduction)
+prophet>=1.1
+umap-learn>=0.5
+# Phase 12-13 (deep learning, NLP, transformers)
+torch>=2.4
+torchvision>=0.19
+transformers>=4.44
+datasets>=3.0
+tokenizers>=0.20
+sentence-transformers>=3.1
+# Phase 14 (GenAI, RAG, LangChain, vector search)
+langchain>=0.3
+langchain-community>=0.3
+openai>=1.50
+faiss-cpu>=1.8
+chromadb>=0.5
+pypdf>=5.0
+# Phase 15 (deployment, MLOps, data engineering)
+fastapi>=0.115
+uvicorn>=0.32
+pydantic>=2.9
+flask>=3.0
+streamlit>=1.39
+mlflow>=2.17
+pyspark>=3.5
+# Phase 2 (testing and tooling)
+pytest>=8.3
+ruff>=0.6
+mypy>=1.11
+python-dotenv>=1.0
+requests>=2.32
+beautifulsoup4>=4.12
